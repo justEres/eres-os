@@ -1,14 +1,13 @@
-#![cfg_attr(not(test), no_std)]
+#![cfg_attr(eres_kernel, no_std)]
+#![cfg_attr(not(eres_kernel), allow(dead_code))]
 
 mod arch;
 mod console;
-#[cfg(not(test))]
+#[cfg(eres_kernel)]
 mod panic_handler;
 mod shell;
 
-#[cfg(test)]
-extern crate std;
-
+#[cfg(eres_kernel)]
 #[unsafe(no_mangle)]
 pub extern "C" fn kernel_main() -> ! {
     console::clear();
@@ -36,6 +35,7 @@ pub extern "C" fn kernel_main() -> ! {
     }
 }
 
+#[cfg(eres_kernel)]
 fn keyboard_smoke_test() {
     use arch::x86_64::keyboard;
 

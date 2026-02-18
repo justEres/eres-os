@@ -29,9 +29,9 @@ if ! rustup target list --installed | grep -qx "x86_64-unknown-none"; then
 fi
 
 if [[ -n "$CARGO_FEATURES" ]]; then
-    cargo build --release --target x86_64-unknown-none --features "$CARGO_FEATURES"
+    cargo build --release --lib --target x86_64-unknown-none --features "$CARGO_FEATURES"
 else
-    cargo build --release --target x86_64-unknown-none
+    cargo build --release --lib --target x86_64-unknown-none
 fi
 
 as --64 "$ROOT_DIR/boot/stage2.S" -o "$BUILD_DIR/stage2.o"

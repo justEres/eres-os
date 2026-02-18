@@ -34,6 +34,14 @@ Expected output includes:
 
 ## Run in QEMU
 
+Cargo-native run (recommended):
+
+```bash
+cargo run -- --headless
+```
+
+Or call script directly:
+
 ```bash
 ./scripts/run_qemu.sh
 ```
@@ -82,7 +90,7 @@ Keyboard decoding uses a German QWERTZ-oriented scancode mapping with ASCII fall
 Host unit tests for command parsing:
 
 ```bash
-./scripts/test_commands.sh
+cargo test
 ```
 
 QEMU integration command tests:
