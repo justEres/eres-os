@@ -46,6 +46,12 @@ For headless mode (useful for automated checks):
 ./scripts/run_qemu.sh --headless
 ```
 
+For command-parser test mode in QEMU:
+
+```bash
+./scripts/run_qemu.sh --test
+```
+
 Debug markers are printed to QEMU debug console (`port 0xE9`):
 
 - `B` stage1 started
@@ -68,6 +74,22 @@ After boot, a simple shell prompt is available:
 - `panic` (triggers invalid opcode exception intentionally)
 - `halt`
 - `reboot`
+
+Keyboard decoding uses a German QWERTZ-oriented scancode mapping with ASCII fallbacks.
+
+## Tests
+
+Host unit tests for command parsing:
+
+```bash
+./scripts/test_commands.sh
+```
+
+QEMU integration command tests:
+
+```bash
+./scripts/test_qemu_commands.sh
+```
 
 ## Repo layout
 

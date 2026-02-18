@@ -6,6 +6,10 @@ edition = "2024"
 [lib]
 crate-type = ["staticlib"]
 
+[features]
+default = []
+qemu-test = []
+
 [dependencies]
 
 [profile.dev]

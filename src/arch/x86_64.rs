@@ -65,3 +65,27 @@ pub fn reboot() -> ! {
     io::outb(0x64, 0xFE);
     halt_loop();
 }
+
+#[cfg(feature = "qemu-test")]
+pub fn qemu_exit_success() -> ! {
+    qemu_exit(0x10);
+}
+
+#[cfg(feature = "qemu-test")]
+pub fn qemu_exit_failure() -> ! {
+    qemu_exit(0x11);
+}
+
+#[cfg(feature = "qemu-test")]
+fn qemu_exit(code: u32) -> ! {
+    disable_interrupts();
+    unsafe {
+        asm!(
+            "out dx, eax",
+            in("dx") 0xf4_u16,
+            in("eax") code,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    halt_loop();
+}

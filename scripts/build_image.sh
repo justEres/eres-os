@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 TARGET_DIR="$ROOT_DIR/target/x86_64-unknown-none/release"
+CARGO_FEATURES="${ERES_FEATURES:-}"
 
 mkdir -p "$BUILD_DIR"
 
@@ -27,7 +28,11 @@ if ! rustup target list --installed | grep -qx "x86_64-unknown-none"; then
     rustup target add x86_64-unknown-none
 fi
 
-cargo build --release --target x86_64-unknown-none
+if [[ -n "$CARGO_FEATURES" ]]; then
+    cargo build --release --target x86_64-unknown-none --features "$CARGO_FEATURES"
+else
+    cargo build --release --target x86_64-unknown-none
+fi
 
 as --64 "$ROOT_DIR/boot/stage2.S" -o "$BUILD_DIR/stage2.o"
 
