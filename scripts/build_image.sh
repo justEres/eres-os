@@ -34,6 +34,7 @@ as --64 "$ROOT_DIR/boot/stage2.S" -o "$BUILD_DIR/stage2.o"
 ld.lld \
     -m elf_x86_64 \
     -nostdlib \
+    --gc-sections \
     -T "$ROOT_DIR/build/linker.ld" \
     -o "$BUILD_DIR/stage2.elf" \
     "$BUILD_DIR/stage2.o" \
@@ -46,11 +47,6 @@ stage2_sectors=$(((stage2_size + 511) / 512))
 
 if (( stage2_sectors == 0 )); then
     echo "Invalid stage2 size: $stage2_size bytes" >&2
-    exit 1
-fi
-
-if (( stage2_sectors > 63 )); then
-    echo "Stage2 is too large for current CHS boot read: $stage2_sectors sectors (max 63)" >&2
     exit 1
 fi
 

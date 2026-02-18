@@ -71,7 +71,7 @@ long_mode_entry:
     hlt
     jmp 1b
 
-.section .rodata
+.section .text.boot
 .align 8
 gdt_start:
     .quad 0x0000000000000000

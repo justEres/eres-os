@@ -38,6 +38,14 @@ Expected output includes:
 ./scripts/run_qemu.sh
 ```
 
+Default mode opens a QEMU GUI window.
+
+For headless mode (useful for automated checks):
+
+```bash
+./scripts/run_qemu.sh --headless
+```
+
 Debug markers are printed to QEMU debug console (`port 0xE9`):
 
 - `B` stage1 started
@@ -49,6 +57,17 @@ Debug markers are printed to QEMU debug console (`port 0xE9`):
 Then Rust prints:
 
 - `Eres OS: Rust kernel reached long mode.`
+- `Eres OS: IDT/PIC initialized.`
+- `Eres OS: keyboard decode OK.`
+
+After boot, a simple shell prompt is available:
+
+- `help`
+- `echo <text>`
+- `clear`
+- `panic` (triggers invalid opcode exception intentionally)
+- `halt`
+- `reboot`
 
 ## Repo layout
 
