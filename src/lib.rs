@@ -5,6 +5,7 @@ extern crate alloc;
 
 mod arch;
 mod console;
+mod fs;
 mod memory;
 mod storage;
 #[cfg(eres_kernel)]
