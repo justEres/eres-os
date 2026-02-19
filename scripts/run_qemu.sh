@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE="$ROOT_DIR/build/os.img"
+FS_IMAGE="$ROOT_DIR/build/simplefs.img"
 HEADLESS=0
 TEST_MODE=0
 
@@ -53,7 +54,7 @@ fi
 
 if [[ "$HEADLESS" -eq 1 ]]; then
     QEMU_ARGS=(
-        -drive "format=raw,file=$IMAGE"
+        -drive "if=ide,index=0,media=disk,format=raw,file=$IMAGE"
         -display none
         -monitor none
         -serial none
@@ -61,6 +62,9 @@ if [[ "$HEADLESS" -eq 1 ]]; then
         -no-reboot
         -no-shutdown
     )
+    if [[ -f "$FS_IMAGE" ]]; then
+        QEMU_ARGS+=(-drive "if=ide,index=1,media=disk,format=raw,file=$FS_IMAGE")
+    fi
 
     if [[ "$TEST_MODE" -eq 1 ]]; then
         set +e
@@ -79,8 +83,13 @@ if [[ "$HEADLESS" -eq 1 ]]; then
         qemu-system-x86_64 "${QEMU_ARGS[@]}"
     fi
 else
-    qemu-system-x86_64 \
-        -drive format=raw,file="$IMAGE" \
-        -no-reboot \
+    QEMU_ARGS=(
+        -drive "if=ide,index=0,media=disk,format=raw,file=$IMAGE"
+        -no-reboot
         -no-shutdown
+    )
+    if [[ -f "$FS_IMAGE" ]]; then
+        QEMU_ARGS+=(-drive "if=ide,index=1,media=disk,format=raw,file=$FS_IMAGE")
+    fi
+    qemu-system-x86_64 "${QEMU_ARGS[@]}"
 fi

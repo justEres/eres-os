@@ -155,7 +155,7 @@ fn fs_smoke_test() {
     use storage::ata_pio::AtaPio;
     use storage::cache::CachedBlockDevice;
 
-    let dev = CachedBlockDevice::new(AtaPio::primary_master(), 16);
+    let dev = CachedBlockDevice::new(AtaPio::primary_slave(), 16);
     match SimpleFs::mount(dev) {
         Ok(fs) => {
             let _ = fs.superblock();

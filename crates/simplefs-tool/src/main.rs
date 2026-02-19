@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 struct InputFile {
-    source: PathBuf,
     name: String,
     data: Vec<u8>,
 }
@@ -47,7 +46,6 @@ fn load_input_file(path: &Path) -> Result<InputFile, String> {
         .to_string();
     let data = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     Ok(InputFile {
-        source: path.to_path_buf(),
         name,
         data,
     })

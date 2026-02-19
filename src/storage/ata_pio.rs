@@ -26,6 +26,10 @@ impl AtaPio {
         Self { drive_select: 0xE0 }
     }
 
+    pub fn primary_slave() -> Self {
+        Self { drive_select: 0xF0 }
+    }
+
     fn wait_ready(&self) -> Result<u8, BlockError> {
         for _ in 0..STATUS_POLL_LIMIT {
             let status = io::inb(ATA_STATUS_COMMAND);

@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 TARGET_DIR="$ROOT_DIR/target/x86_64-unknown-none/release"
 CARGO_FEATURES="${ERES_FEATURES:-}"
+SIMPLEFS_DIR="$ROOT_DIR/fs/root"
+SIMPLEFS_IMAGE="$BUILD_DIR/simplefs.img"
 
 mkdir -p "$BUILD_DIR"
 
@@ -74,3 +76,11 @@ dd if="$BUILD_DIR/stage2.bin" of="$BUILD_DIR/os.img" bs=512 seek=1 conv=notrunc 
 
 echo "Built $BUILD_DIR/os.img"
 echo "Stage2 size: $stage2_size bytes ($stage2_sectors sectors)"
+
+if [[ -d "$SIMPLEFS_DIR" ]]; then
+    mapfile -t SIMPLEFS_FILES < <(find "$SIMPLEFS_DIR" -maxdepth 1 -type f | sort)
+    if (( ${#SIMPLEFS_FILES[@]} > 0 )); then
+        cargo run -q -p simplefs-tool -- "$SIMPLEFS_IMAGE" "${SIMPLEFS_FILES[@]}"
+        echo "Built $SIMPLEFS_IMAGE with ${#SIMPLEFS_FILES[@]} files"
+    fi
+fi

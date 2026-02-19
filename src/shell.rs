@@ -2,9 +2,18 @@ use crate::{arch, console};
 use alloc::vec::Vec;
 use core::arch::asm;
 
+#[cfg(eres_kernel)]
+use crate::fs::simplefs::SimpleFs;
+#[cfg(eres_kernel)]
+use crate::fs::vfs::{resolve_path, FileSystem, NodeType};
+#[cfg(eres_kernel)]
+use crate::storage::ata_pio::AtaPio;
+#[cfg(eres_kernel)]
+use crate::storage::cache::CachedBlockDevice;
+
 const MAX_LINE: usize = 128;
 const MAX_HISTORY: usize = 16;
-const HELP_TEXT: &[u8] = b"commands: help echo clear history mem ticks panic halt reboot";
+const HELP_TEXT: &[u8] = b"commands: help echo clear history mem ticks ls cat stat panic halt reboot";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CommandKind {
@@ -15,6 +24,9 @@ enum CommandKind {
     History,
     Mem,
     Ticks,
+    Ls,
+    Cat,
+    Stat,
     Panic,
     Halt,
     Reboot,
@@ -149,6 +161,36 @@ fn execute_command(line: &[u8], history: &mut Vec<Vec<u8>>) {
                 console::write_line(b"frame allocator not initialized");
             }
         }
+        CommandKind::Ls => {
+            let path = match core::str::from_utf8(parsed.arg) {
+                Ok(path) => path,
+                Err(_) => {
+                    console::write_line(b"invalid path");
+                    return;
+                }
+            };
+            run_ls(path);
+        }
+        CommandKind::Cat => {
+            let path = match core::str::from_utf8(parsed.arg) {
+                Ok(path) => path,
+                Err(_) => {
+                    console::write_line(b"invalid path");
+                    return;
+                }
+            };
+            run_cat(path);
+        }
+        CommandKind::Stat => {
+            let path = match core::str::from_utf8(parsed.arg) {
+                Ok(path) => path,
+                Err(_) => {
+                    console::write_line(b"invalid path");
+                    return;
+                }
+            };
+            run_stat(path);
+        }
         CommandKind::Panic => {
             unsafe {
                 asm!("ud2", options(nomem, nostack, preserves_flags));
@@ -169,80 +211,215 @@ fn execute_command(line: &[u8], history: &mut Vec<Vec<u8>>) {
     }
 }
 
+#[cfg(eres_kernel)]
+type FsDevice = CachedBlockDevice<AtaPio>;
+
+#[cfg(eres_kernel)]
+fn mount_simplefs() -> Result<SimpleFs<FsDevice>, &'static [u8]> {
+    let dev = CachedBlockDevice::new(AtaPio::primary_slave(), 16);
+    SimpleFs::mount(dev).map_err(|_| b"simplefs unavailable".as_slice())
+}
+
+#[cfg(eres_kernel)]
+fn resolve_simplefs_path(fs: &SimpleFs<FsDevice>, path: &str) -> Result<crate::fs::vfs::NodeId, &'static [u8]> {
+    if path == "/" {
+        Ok(fs.root())
+    } else {
+        resolve_path(fs, path).map_err(|_| b"path not found".as_slice())
+    }
+}
+
+#[cfg(eres_kernel)]
+fn run_ls(path: &str) {
+    let Ok(fs) = mount_simplefs() else {
+        console::write_line(b"simplefs unavailable");
+        return;
+    };
+
+    let Ok(node) = resolve_simplefs_path(&fs, path) else {
+        console::write_line(b"path not found");
+        return;
+    };
+
+    let Ok(meta) = fs.metadata(node) else {
+        console::write_line(b"stat failed");
+        return;
+    };
+
+    if meta.node_type != NodeType::Directory {
+        console::write_line(b"not a directory");
+        return;
+    }
+
+    let Ok(entries) = fs.list(node) else {
+        console::write_line(b"list failed");
+        return;
+    };
+
+    if entries.is_empty() {
+        console::write_line(b"(empty)");
+        return;
+    }
+
+    for entry in entries {
+        console::write_line(entry.name().as_bytes());
+    }
+}
+
+#[cfg(not(eres_kernel))]
+fn run_ls(_path: &str) {
+    console::write_line(b"simplefs unavailable");
+}
+
+#[cfg(eres_kernel)]
+fn run_cat(path: &str) {
+    let Ok(fs) = mount_simplefs() else {
+        console::write_line(b"simplefs unavailable");
+        return;
+    };
+
+    let Ok(node) = resolve_simplefs_path(&fs, path) else {
+        console::write_line(b"path not found");
+        return;
+    };
+
+    let Ok(meta) = fs.metadata(node) else {
+        console::write_line(b"stat failed");
+        return;
+    };
+
+    if meta.node_type != NodeType::File {
+        console::write_line(b"not a file");
+        return;
+    }
+
+    let size = meta.size as usize;
+    let mut buffer = Vec::new();
+    buffer.resize(size, 0);
+
+    let mut total = 0_usize;
+    while total < size {
+        match fs.read(node, total as u64, &mut buffer[total..]) {
+            Ok(0) => break,
+            Ok(read) => total += read,
+            Err(_) => {
+                console::write_line(b"read failed");
+                return;
+            }
+        }
+    }
+
+    if total > 0 {
+        console::write_str(&buffer[..total]);
+    }
+    if total == 0 || buffer[total - 1] != b'\n' {
+        console::write_byte(b'\n');
+    }
+}
+
+#[cfg(not(eres_kernel))]
+fn run_cat(_path: &str) {
+    console::write_line(b"simplefs unavailable");
+}
+
+#[cfg(eres_kernel)]
+fn run_stat(path: &str) {
+    let Ok(fs) = mount_simplefs() else {
+        console::write_line(b"simplefs unavailable");
+        return;
+    };
+
+    let Ok(node) = resolve_simplefs_path(&fs, path) else {
+        console::write_line(b"path not found");
+        return;
+    };
+
+    let Ok(meta) = fs.metadata(node) else {
+        console::write_line(b"stat failed");
+        return;
+    };
+
+    let kind = if meta.node_type == NodeType::Directory {
+        b"directory".as_slice()
+    } else {
+        b"file".as_slice()
+    };
+
+    console::write_str(b"type=");
+    console::write_str(kind);
+    console::write_str(b" size=");
+    console::write_u64(meta.size);
+    console::write_byte(b'\n');
+}
+
+#[cfg(not(eres_kernel))]
+fn run_stat(_path: &str) {
+    console::write_line(b"simplefs unavailable");
+}
+
 fn parse_command(line: &[u8]) -> ParsedCommand<'_> {
-    if line.is_empty() {
+    let trimmed = trim_spaces(line);
+    if trimmed.is_empty() {
         return ParsedCommand {
             kind: CommandKind::Empty,
             arg: b"",
         };
     }
 
-    if line == b"help" {
-        return ParsedCommand {
+    let (cmd, arg) = split_cmd_arg(trimmed);
+    match cmd {
+        b"help" if arg.is_empty() => ParsedCommand {
             kind: CommandKind::Help,
             arg: b"",
-        };
-    }
-
-    if line == b"clear" {
-        return ParsedCommand {
+        },
+        b"clear" if arg.is_empty() => ParsedCommand {
             kind: CommandKind::Clear,
             arg: b"",
-        };
-    }
-
-    if line == b"history" {
-        return ParsedCommand {
+        },
+        b"history" if arg.is_empty() => ParsedCommand {
             kind: CommandKind::History,
             arg: b"",
-        };
-    }
-
-    if line == b"mem" {
-        return ParsedCommand {
+        },
+        b"mem" if arg.is_empty() => ParsedCommand {
             kind: CommandKind::Mem,
             arg: b"",
-        };
-    }
-
-    if line == b"ticks" {
-        return ParsedCommand {
+        },
+        b"ticks" if arg.is_empty() => ParsedCommand {
             kind: CommandKind::Ticks,
             arg: b"",
-        };
-    }
-
-    if line == b"panic" {
-        return ParsedCommand {
+        },
+        b"panic" if arg.is_empty() => ParsedCommand {
             kind: CommandKind::Panic,
             arg: b"",
-        };
-    }
-
-    if line == b"halt" {
-        return ParsedCommand {
+        },
+        b"halt" if arg.is_empty() => ParsedCommand {
             kind: CommandKind::Halt,
             arg: b"",
-        };
-    }
-
-    if line == b"reboot" {
-        return ParsedCommand {
+        },
+        b"reboot" if arg.is_empty() => ParsedCommand {
             kind: CommandKind::Reboot,
             arg: b"",
-        };
-    }
-
-    if let Some(rest) = line.strip_prefix(b"echo ") {
-        return ParsedCommand {
+        },
+        b"echo" if !arg.is_empty() => ParsedCommand {
             kind: CommandKind::Echo,
-            arg: rest,
-        };
-    }
-
-    ParsedCommand {
-        kind: CommandKind::Unknown,
-        arg: b"",
+            arg,
+        },
+        b"ls" => ParsedCommand {
+            kind: CommandKind::Ls,
+            arg: if arg.is_empty() { b"/" } else { arg },
+        },
+        b"cat" if !arg.is_empty() => ParsedCommand {
+            kind: CommandKind::Cat,
+            arg,
+        },
+        b"stat" if !arg.is_empty() => ParsedCommand {
+            kind: CommandKind::Stat,
+            arg,
+        },
+        _ => ParsedCommand {
+            kind: CommandKind::Unknown,
+            arg: b"",
+        },
     }
 }
 
@@ -259,7 +436,13 @@ pub fn run_command_self_tests() -> bool {
     ok &= check_parse(b"halt", CommandKind::Halt, b"");
     ok &= check_parse(b"reboot", CommandKind::Reboot, b"");
     ok &= check_parse(b"echo hello", CommandKind::Echo, b"hello");
+    ok &= check_parse(b"ls", CommandKind::Ls, b"/");
+    ok &= check_parse(b"ls /", CommandKind::Ls, b"/");
+    ok &= check_parse(b"cat /motd.txt", CommandKind::Cat, b"/motd.txt");
+    ok &= check_parse(b"stat /motd.txt", CommandKind::Stat, b"/motd.txt");
     ok &= check_parse(b"echo", CommandKind::Unknown, b"");
+    ok &= check_parse(b"cat", CommandKind::Unknown, b"");
+    ok &= check_parse(b"stat", CommandKind::Unknown, b"");
     ok &= check_parse(b"unknown", CommandKind::Unknown, b"");
     ok
 }
@@ -272,6 +455,33 @@ fn check_parse(line: &[u8], expected_kind: CommandKind, expected_arg: &[u8]) -> 
 
 fn is_printable_ascii(byte: u8) -> bool {
     (0x20..=0x7E).contains(&byte)
+}
+
+fn trim_spaces(mut input: &[u8]) -> &[u8] {
+    while let Some((first, rest)) = input.split_first() {
+        if *first == b' ' {
+            input = rest;
+        } else {
+            break;
+        }
+    }
+
+    while matches!(input.last(), Some(b' ')) {
+        input = &input[..input.len() - 1];
+    }
+
+    input
+}
+
+fn split_cmd_arg(input: &[u8]) -> (&[u8], &[u8]) {
+    match input.iter().position(|b| *b == b' ') {
+        Some(space) => {
+            let cmd = &input[..space];
+            let arg = trim_spaces(&input[space + 1..]);
+            (cmd, arg)
+        }
+        None => (input, b""),
+    }
 }
 
 fn replace_line(line_buf: &mut [u8], len: &mut usize, replacement: &[u8]) {
@@ -332,6 +542,27 @@ mod tests {
         let parsed = parse_command(b"mem");
         assert_eq!(parsed.kind, CommandKind::Mem);
         assert_eq!(parsed.arg, b"");
+    }
+
+    #[test]
+    fn parses_ls_default_path() {
+        let parsed = parse_command(b"ls");
+        assert_eq!(parsed.kind, CommandKind::Ls);
+        assert_eq!(parsed.arg, b"/");
+    }
+
+    #[test]
+    fn parses_cat_path() {
+        let parsed = parse_command(b"cat /motd.txt");
+        assert_eq!(parsed.kind, CommandKind::Cat);
+        assert_eq!(parsed.arg, b"/motd.txt");
+    }
+
+    #[test]
+    fn parses_stat_path() {
+        let parsed = parse_command(b"stat /version.txt");
+        assert_eq!(parsed.kind, CommandKind::Stat);
+        assert_eq!(parsed.arg, b"/version.txt");
     }
 
     #[test]

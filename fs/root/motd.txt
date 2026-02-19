@@ -1,0 +1,2 @@
+Welcome to Eres OS.
+This file comes from simplefs.
