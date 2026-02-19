@@ -33,6 +33,7 @@ pub extern "C" fn kernel_main(boot_info_ptr: *const memory::bootinfo::BootInfoRa
             heap_smoke_test();
             block_device_smoke_test();
             vm_smoke_test();
+            fs_smoke_test();
         }
     } else {
         console::write_line(b"Eres OS: boot info invalid.");
@@ -145,5 +146,22 @@ fn vm_smoke_test() {
         console::write_line(b"Eres OS: vm mapper OK.");
     } else {
         console::write_line(b"Eres OS: vm mapper invalid.");
+    }
+}
+
+#[cfg(eres_kernel)]
+fn fs_smoke_test() {
+    use fs::simplefs::SimpleFs;
+    use storage::ata_pio::AtaPio;
+
+    let dev = AtaPio::primary_master();
+    match SimpleFs::mount(dev) {
+        Ok(fs) => {
+            let _ = fs.superblock();
+            console::write_line(b"Eres OS: simplefs mounted.");
+        }
+        Err(_) => {
+            console::write_line(b"Eres OS: simplefs not present.");
+        }
     }
 }

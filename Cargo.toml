@@ -3,6 +3,12 @@ name = "eres-os"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+members = [
+    "crates/simplefs-core",
+    "crates/simplefs-tool",
+]
+
 [lib]
 crate-type = ["staticlib"]
 
@@ -11,6 +17,7 @@ default = []
 qemu-test = []
 
 [dependencies]
+simplefs-core = { path = "crates/simplefs-core", default-features = false }
 
 [profile.dev]
 panic = "abort"
