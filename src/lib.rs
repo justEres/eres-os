@@ -6,6 +6,7 @@ extern crate alloc;
 mod arch;
 mod console;
 mod memory;
+mod storage;
 #[cfg(eres_kernel)]
 mod panic_handler;
 mod shell;
@@ -29,6 +30,7 @@ pub extern "C" fn kernel_main(boot_info_ptr: *const memory::bootinfo::BootInfoRa
             }
             memory::heap::init();
             heap_smoke_test();
+            block_device_smoke_test();
         }
     } else {
         console::write_line(b"Eres OS: boot info invalid.");
@@ -109,5 +111,25 @@ fn heap_smoke_test() {
         console::write_line(b"Eres OS: heap allocator OK.");
     } else {
         console::write_line(b"Eres OS: heap allocator FAILED.");
+    }
+}
+
+#[cfg(eres_kernel)]
+fn block_device_smoke_test() {
+    use storage::ata_pio::AtaPio;
+    use storage::block::BlockDevice;
+
+    let mut dev = AtaPio::primary_master();
+    let mut sector = [0_u8; 512];
+    match dev.read_sector(0, &mut sector) {
+        Ok(()) if sector[510] == 0x55 && sector[511] == 0xAA => {
+            console::write_line(b"Eres OS: block device OK.");
+        }
+        Ok(()) => {
+            console::write_line(b"Eres OS: block device invalid signature.");
+        }
+        Err(_) => {
+            console::write_line(b"Eres OS: block device read failed.");
+        }
     }
 }
