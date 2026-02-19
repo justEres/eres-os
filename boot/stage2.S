@@ -8,11 +8,23 @@
 .equ CODE32_SEL, 0x08
 .equ DATA_SEL,   0x10
 .equ CODE64_SEL, 0x18
+.equ BOOT_INFO_ADDR, 0x4f00
+.equ E820_BUFFER_ADDR, 0x5000
+.equ E820_MAX_ENTRIES, 64
+.equ BOOT_INFO_MAGIC, 0x534f5245
 
 _start:
     cli
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov sp, 0x7b00
+
     mov al, 'S'
     out 0xe9, al
+
+    call detect_memory_map
 
     lgdt [gdt_descriptor]
 
@@ -65,6 +77,7 @@ long_mode_entry:
     mov al, 'R'
     out 0xe9, al
 
+    mov rdi, BOOT_INFO_ADDR
     call kernel_main
 
 1:
@@ -104,3 +117,50 @@ pd_table:
 stack_bottom:
     .fill 4096, 1, 0
 stack_top:
+
+.section .text.boot
+.code16
+detect_memory_map:
+    mov dword ptr [BOOT_INFO_ADDR + 0], BOOT_INFO_MAGIC
+    mov dword ptr [BOOT_INFO_ADDR + 4], 1
+    mov dword ptr [BOOT_INFO_ADDR + 8], 0
+    mov dword ptr [BOOT_INFO_ADDR + 12], 24
+    mov dword ptr [BOOT_INFO_ADDR + 16], E820_BUFFER_ADDR
+    mov dword ptr [BOOT_INFO_ADDR + 20], 0
+
+    mov word ptr [e820_count], 0
+    mov word ptr [e820_ptr], E820_BUFFER_ADDR
+
+    xor ebx, ebx
+
+1:
+    mov eax, 0xE820
+    mov ecx, 24
+    mov edx, 0x534D4150
+    mov di, word ptr [e820_ptr]
+    int 0x15
+    jc 2f
+    cmp eax, 0x534D4150
+    jne 2f
+
+    mov ax, word ptr [e820_count]
+    inc ax
+    mov word ptr [e820_count], ax
+
+    add word ptr [e820_ptr], 24
+    cmp ax, E820_MAX_ENTRIES
+    jae 2f
+
+    test ebx, ebx
+    jne 1b
+
+2:
+    xor eax, eax
+    mov ax, word ptr [e820_count]
+    mov dword ptr [BOOT_INFO_ADDR + 8], eax
+    ret
+
+e820_count:
+    .word 0
+e820_ptr:
+    .word 0
