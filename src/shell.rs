@@ -4,7 +4,7 @@ use core::arch::asm;
 
 const MAX_LINE: usize = 128;
 const MAX_HISTORY: usize = 16;
-const HELP_TEXT: &[u8] = b"commands: help echo clear history ticks panic halt reboot";
+const HELP_TEXT: &[u8] = b"commands: help echo clear history mem ticks panic halt reboot";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CommandKind {
@@ -13,6 +13,7 @@ enum CommandKind {
     Echo,
     Clear,
     History,
+    Mem,
     Ticks,
     Panic,
     Halt,
@@ -30,30 +31,66 @@ pub fn run() -> ! {
     let mut line_buf = [0_u8; MAX_LINE];
     let mut len = 0_usize;
     let mut history: Vec<Vec<u8>> = Vec::new();
+    let mut history_index: Option<usize> = None;
 
     console::write_line(b"Type 'help' for commands.");
     prompt();
 
     loop {
-        if let Some(ch) = arch::x86_64::keyboard::try_read_char() {
-            match ch {
-                b'\n' => {
+        if let Some(key) = arch::x86_64::keyboard::try_read_key() {
+            match key {
+                arch::x86_64::keyboard::KeyEvent::Enter => {
                     console::write_byte(b'\n');
                     execute_command(&line_buf[..len], &mut history);
                     len = 0;
+                    history_index = None;
                     prompt();
                 }
-                8 => {
+                arch::x86_64::keyboard::KeyEvent::Backspace => {
                     if len > 0 {
                         len -= 1;
                         console::backspace();
                     }
+                    history_index = None;
                 }
-                b if is_printable_ascii(b) => {
+                arch::x86_64::keyboard::KeyEvent::Char(b) if is_printable_ascii(b) => {
                     if len < MAX_LINE {
                         line_buf[len] = b;
                         len += 1;
                         console::write_byte(b);
+                    }
+                    history_index = None;
+                }
+                arch::x86_64::keyboard::KeyEvent::Up => {
+                    if history.is_empty() {
+                        continue;
+                    }
+
+                    history_index = Some(match history_index {
+                        Some(current) if current > 0 => current - 1,
+                        Some(current) => current,
+                        None => history.len() - 1,
+                    });
+
+                    if let Some(index) = history_index {
+                        replace_line(&mut line_buf, &mut len, &history[index]);
+                    }
+                }
+                arch::x86_64::keyboard::KeyEvent::Down => {
+                    if history.is_empty() {
+                        continue;
+                    }
+
+                    match history_index {
+                        Some(current) if current + 1 < history.len() => {
+                            history_index = Some(current + 1);
+                            replace_line(&mut line_buf, &mut len, &history[current + 1]);
+                        }
+                        Some(_) => {
+                            history_index = None;
+                            replace_line(&mut line_buf, &mut len, b"");
+                        }
+                        None => {}
                     }
                 }
                 _ => {}
@@ -98,6 +135,19 @@ fn execute_command(line: &[u8], history: &mut Vec<Vec<u8>>) {
             console::write_str(b"ticks=");
             console::write_u64(arch::x86_64::pit::ticks());
             console::write_byte(b'\n');
+        }
+        CommandKind::Mem => {
+            if let Some(stats) = crate::memory::frame_allocator::stats() {
+                console::write_str(b"frames total=");
+                console::write_u64(stats.total_frames);
+                console::write_str(b" allocated=");
+                console::write_u64(stats.allocated_frames);
+                console::write_str(b" free=");
+                console::write_u64(stats.free_frames);
+                console::write_byte(b'\n');
+            } else {
+                console::write_line(b"frame allocator not initialized");
+            }
         }
         CommandKind::Panic => {
             unsafe {
@@ -144,6 +194,13 @@ fn parse_command(line: &[u8]) -> ParsedCommand<'_> {
     if line == b"history" {
         return ParsedCommand {
             kind: CommandKind::History,
+            arg: b"",
+        };
+    }
+
+    if line == b"mem" {
+        return ParsedCommand {
+            kind: CommandKind::Mem,
             arg: b"",
         };
     }
@@ -196,6 +253,7 @@ pub fn run_command_self_tests() -> bool {
     ok &= check_parse(b"help", CommandKind::Help, b"");
     ok &= check_parse(b"clear", CommandKind::Clear, b"");
     ok &= check_parse(b"history", CommandKind::History, b"");
+    ok &= check_parse(b"mem", CommandKind::Mem, b"");
     ok &= check_parse(b"ticks", CommandKind::Ticks, b"");
     ok &= check_parse(b"panic", CommandKind::Panic, b"");
     ok &= check_parse(b"halt", CommandKind::Halt, b"");
@@ -214,6 +272,20 @@ fn check_parse(line: &[u8], expected_kind: CommandKind, expected_arg: &[u8]) -> 
 
 fn is_printable_ascii(byte: u8) -> bool {
     (0x20..=0x7E).contains(&byte)
+}
+
+fn replace_line(line_buf: &mut [u8], len: &mut usize, replacement: &[u8]) {
+    while *len > 0 {
+        console::backspace();
+        *len -= 1;
+    }
+
+    let copy_len = replacement.len().min(line_buf.len());
+    line_buf[..copy_len].copy_from_slice(&replacement[..copy_len]);
+    *len = copy_len;
+    for byte in &replacement[..copy_len] {
+        console::write_byte(*byte);
+    }
 }
 
 #[cfg(test)]
@@ -252,6 +324,13 @@ mod tests {
     fn parses_ticks_command() {
         let parsed = parse_command(b"ticks");
         assert_eq!(parsed.kind, CommandKind::Ticks);
+        assert_eq!(parsed.arg, b"");
+    }
+
+    #[test]
+    fn parses_mem_command() {
+        let parsed = parse_command(b"mem");
+        assert_eq!(parsed.kind, CommandKind::Mem);
         assert_eq!(parsed.arg, b"");
     }
 

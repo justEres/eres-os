@@ -83,6 +83,8 @@ After boot, a simple shell prompt is available:
 - `echo <text>`
 - `clear`
 - `history`
+- history recall: `Up` / `Down` arrows
+- `mem` (frame allocator stats)
 - `ticks`
 - `panic` (triggers invalid opcode exception intentionally)
 - `halt`

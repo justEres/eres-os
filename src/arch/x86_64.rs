@@ -1,3 +1,4 @@
+#[cfg(eres_kernel)]
 use core::arch::asm;
 
 pub mod interrupts;
@@ -8,13 +9,18 @@ mod pic;
 
 #[inline]
 pub fn halt() {
+    #[cfg(eres_kernel)]
     unsafe {
         asm!("hlt");
     }
+
+    #[cfg(not(eres_kernel))]
+    core::hint::spin_loop();
 }
 
 #[inline]
 pub fn disable_interrupts() {
+    #[cfg(eres_kernel)]
     unsafe {
         asm!("cli", options(nomem, nostack, preserves_flags));
     }
@@ -22,6 +28,7 @@ pub fn disable_interrupts() {
 
 #[inline]
 pub fn enable_interrupts() {
+    #[cfg(eres_kernel)]
     unsafe {
         asm!("sti", options(nomem, nostack, preserves_flags));
     }
@@ -29,11 +36,19 @@ pub fn enable_interrupts() {
 
 #[inline]
 pub fn interrupts_enabled() -> bool {
+    #[cfg(not(eres_kernel))]
+    {
+        false
+    }
+
+    #[cfg(eres_kernel)]
+    {
     let rflags: u64;
     unsafe {
         asm!("pushfq; pop {}", out(reg) rflags, options(nomem, preserves_flags));
     }
     (rflags & (1 << 9)) != 0
+    }
 }
 
 #[inline]
@@ -62,9 +77,17 @@ pub fn hang() -> ! {
 }
 
 pub fn reboot() -> ! {
+    #[cfg(not(eres_kernel))]
+    {
+        halt_loop();
+    }
+
+    #[cfg(eres_kernel)]
+    {
     disable_interrupts();
     io::outb(0x64, 0xFE);
     halt_loop();
+    }
 }
 
 #[cfg(feature = "qemu-test")]

@@ -12,6 +12,7 @@ pub fn write_byte(byte: u8) {
 
 pub fn backspace() {
     vga::backspace();
+    debugcon::write_bytes(&[8, b' ', 8]);
 }
 
 pub fn write_str(msg: &[u8]) {

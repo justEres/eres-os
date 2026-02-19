@@ -2,6 +2,8 @@ const WIDTH: usize = 80;
 const HEIGHT: usize = 25;
 const VGA_TEXT_BUFFER: *mut u8 = 0xb8000 as *mut u8;
 const VGA_WHITE_ON_BLACK: u8 = 0x0f;
+const CRTC_INDEX_PORT: u16 = 0x3D4;
+const CRTC_DATA_PORT: u16 = 0x3D5;
 
 static mut COLUMN: usize = 0;
 static mut ROW: usize = 0;
@@ -15,6 +17,7 @@ pub fn clear() {
         }
         ROW = 0;
         COLUMN = 0;
+        update_hardware_cursor();
     }
 }
 
@@ -31,6 +34,7 @@ pub fn write_byte(byte: u8) {
                 COLUMN += 1;
             }
         }
+        update_hardware_cursor();
     }
 }
 
@@ -43,6 +47,7 @@ pub fn write_bytes(msg: &[u8]) {
 pub fn backspace() {
     unsafe {
         backspace_inner();
+        update_hardware_cursor();
     }
 }
 
@@ -85,10 +90,29 @@ unsafe fn scroll_one_line() {
     }
 }
 
+fn update_hardware_cursor() {
+    let position = unsafe { (ROW * WIDTH + COLUMN) as u16 };
+    outb(CRTC_INDEX_PORT, 0x0F);
+    outb(CRTC_DATA_PORT, (position & 0xFF) as u8);
+    outb(CRTC_INDEX_PORT, 0x0E);
+    outb(CRTC_DATA_PORT, (position >> 8) as u8);
+}
+
 unsafe fn write_cell(row: usize, col: usize, byte: u8, attr: u8) {
     let offset = (row * WIDTH + col) * 2;
     unsafe {
         *VGA_TEXT_BUFFER.add(offset) = byte;
         *VGA_TEXT_BUFFER.add(offset + 1) = attr;
+    }
+}
+
+fn outb(port: u16, value: u8) {
+    unsafe {
+        core::arch::asm!(
+            "out dx, al",
+            in("dx") port,
+            in("al") value,
+            options(nomem, nostack, preserves_flags)
+        );
     }
 }

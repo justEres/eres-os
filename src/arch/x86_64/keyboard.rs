@@ -6,17 +6,28 @@ use super::io;
 
 const BUFFER_SIZE: usize = 256;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyEvent {
+    Char(u8),
+    Enter,
+    Backspace,
+    Up,
+    Down,
+}
+
 struct KeyboardState {
     shift: bool,
+    e0_prefix: bool,
     head: usize,
     tail: usize,
-    buffer: [u8; BUFFER_SIZE],
+    buffer: [u16; BUFFER_SIZE],
 }
 
 impl KeyboardState {
     const fn new() -> Self {
         Self {
             shift: false,
+            e0_prefix: false,
             head: 0,
             tail: 0,
             buffer: [0; BUFFER_SIZE],
@@ -36,6 +47,15 @@ pub fn handle_irq() {
 }
 
 pub fn try_read_char() -> Option<u8> {
+    match try_read_key() {
+        Some(KeyEvent::Char(ch)) => Some(ch),
+        Some(KeyEvent::Enter) => Some(b'\n'),
+        Some(KeyEvent::Backspace) => Some(8),
+        _ => None,
+    }
+}
+
+pub fn try_read_key() -> Option<KeyEvent> {
     let interrupts_were_enabled = arch::x86_64::save_and_disable_interrupts();
 
     let result = unsafe {
@@ -43,9 +63,9 @@ pub fn try_read_char() -> Option<u8> {
         if state.head == state.tail {
             None
         } else {
-            let ch = state.buffer[state.tail];
+            let code = state.buffer[state.tail];
             state.tail = (state.tail + 1) % BUFFER_SIZE;
-            Some(ch)
+            decode_event(code)
         }
     };
 
@@ -71,6 +91,25 @@ fn feed_scancode(scancode: u8) {
     unsafe {
         let state = &mut *KEYBOARD_STATE.0.get();
 
+        if scancode == 0xE0 {
+            state.e0_prefix = true;
+            return;
+        }
+
+        if state.e0_prefix {
+            state.e0_prefix = false;
+            if (scancode & 0x80) != 0 {
+                return;
+            }
+
+            match scancode {
+                0x48 => push_event(state, KeyEvent::Up),
+                0x50 => push_event(state, KeyEvent::Down),
+                _ => {}
+            }
+            return;
+        }
+
         match scancode {
             0x2A | 0x36 => {
                 state.shift = true;
@@ -88,19 +127,49 @@ fn feed_scancode(scancode: u8) {
         }
 
         if let Some(ch) = decode_scancode(scancode, state.shift) {
-            push_char(state, ch);
+            match ch {
+                8 => push_event(state, KeyEvent::Backspace),
+                b'\n' => push_event(state, KeyEvent::Enter),
+                _ => push_event(state, KeyEvent::Char(ch)),
+            }
         }
     }
 }
 
-fn push_char(state: &mut KeyboardState, ch: u8) {
+fn push_event(state: &mut KeyboardState, event: KeyEvent) {
     let next_head = (state.head + 1) % BUFFER_SIZE;
     if next_head == state.tail {
         return;
     }
 
-    state.buffer[state.head] = ch;
+    state.buffer[state.head] = encode_event(event);
     state.head = next_head;
+}
+
+const KEY_ENTER: u16 = 0x100;
+const KEY_BACKSPACE: u16 = 0x101;
+const KEY_UP: u16 = 0x102;
+const KEY_DOWN: u16 = 0x103;
+
+fn encode_event(event: KeyEvent) -> u16 {
+    match event {
+        KeyEvent::Char(ch) => ch as u16,
+        KeyEvent::Enter => KEY_ENTER,
+        KeyEvent::Backspace => KEY_BACKSPACE,
+        KeyEvent::Up => KEY_UP,
+        KeyEvent::Down => KEY_DOWN,
+    }
+}
+
+fn decode_event(code: u16) -> Option<KeyEvent> {
+    match code {
+        0..=0xFF => Some(KeyEvent::Char(code as u8)),
+        KEY_ENTER => Some(KeyEvent::Enter),
+        KEY_BACKSPACE => Some(KeyEvent::Backspace),
+        KEY_UP => Some(KeyEvent::Up),
+        KEY_DOWN => Some(KeyEvent::Down),
+        _ => None,
+    }
 }
 
 fn decode_scancode(scancode: u8, shift: bool) -> Option<u8> {
@@ -162,4 +231,22 @@ fn decode_scancode(scancode: u8, shift: bool) -> Option<u8> {
     };
 
     Some(ch)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{clear_buffer, inject_scancode, try_read_key, KeyEvent};
+
+    #[test]
+    fn decodes_arrow_up_down() {
+        clear_buffer();
+
+        inject_scancode(0xE0);
+        inject_scancode(0x48);
+        inject_scancode(0xE0);
+        inject_scancode(0x50);
+
+        assert_eq!(try_read_key(), Some(KeyEvent::Up));
+        assert_eq!(try_read_key(), Some(KeyEvent::Down));
+    }
 }
