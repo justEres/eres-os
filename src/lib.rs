@@ -31,6 +31,7 @@ pub extern "C" fn kernel_main(boot_info_ptr: *const memory::bootinfo::BootInfoRa
             memory::heap::init();
             heap_smoke_test();
             block_device_smoke_test();
+            vm_smoke_test();
         }
     } else {
         console::write_line(b"Eres OS: boot info invalid.");
@@ -131,5 +132,17 @@ fn block_device_smoke_test() {
         Err(_) => {
             console::write_line(b"Eres OS: block device read failed.");
         }
+    }
+}
+
+#[cfg(eres_kernel)]
+fn vm_smoke_test() {
+    use memory::vm::Mapper2M;
+    let mapper = memory::vm::boot_mapper();
+    let entry0 = mapper.entry(0);
+    if entry0.is_present() {
+        console::write_line(b"Eres OS: vm mapper OK.");
+    } else {
+        console::write_line(b"Eres OS: vm mapper invalid.");
     }
 }

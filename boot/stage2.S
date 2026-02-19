@@ -99,16 +99,19 @@ gdt_descriptor:
 
 .section .data
 .align 4096
+.global pml4_table
 pml4_table:
     .quad pdpt_table + 0x03
     .fill 511, 8, 0
 
 .align 4096
+.global pdpt_table
 pdpt_table:
     .quad pd_table + 0x03
     .fill 511, 8, 0
 
 .align 4096
+.global pd_table
 pd_table:
     .quad 0x0000000000000083
     .fill 511, 8, 0
