@@ -176,11 +176,17 @@ impl<D: BlockDevice> FileSystem for SimpleFs<D> {
 #[cfg(test)]
 mod tests {
     use alloc::vec;
+    use alloc::vec::Vec;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use simplefs_core::{
         blocks_for_size, dir_blocks_for_entries, DirEntry, Superblock, BLOCK_SIZE, DIR_ENTRY_SIZE,
     };
+    use simplefs_tool::build_image_from_paths;
 
+    use crate::fs::vfs::FileSystem;
     use crate::storage::block::{BlockDevice, BlockError};
 
     use super::SimpleFs;
@@ -218,5 +224,51 @@ mod tests {
 
         let fs = SimpleFs::mount(MemDisk { sectors }).expect("mount");
         assert_eq!(fs.entry_count(), 1);
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        path.push(format!("eres-os-simplefs-test-{name}-{nanos}"));
+        path
+    }
+
+    fn sectors_from_image(image: &[u8]) -> Vec<[u8; BLOCK_SIZE]> {
+        assert_eq!(image.len() % BLOCK_SIZE, 0);
+        let mut sectors = Vec::new();
+        for chunk in image.chunks_exact(BLOCK_SIZE) {
+            let mut sector = [0_u8; BLOCK_SIZE];
+            sector.copy_from_slice(chunk);
+            sectors.push(sector);
+        }
+        sectors
+    }
+
+    #[test]
+    fn tool_generated_image_mounts_and_reads_file() {
+        let dir = temp_path("input");
+        fs::create_dir_all(&dir).expect("create dir");
+        let hello = dir.join("hello.txt");
+        let notes = dir.join("notes.txt");
+        fs::write(&hello, b"hello from tool").expect("write hello");
+        fs::write(&notes, b"notes").expect("write notes");
+
+        let sources = vec![hello, notes];
+        let image = build_image_from_paths(&sources).expect("build image");
+        let sectors = sectors_from_image(&image);
+        let fs = SimpleFs::mount(MemDisk { sectors }).expect("mount");
+
+        let node = fs.lookup(fs.root(), "hello.txt").expect("lookup file");
+        let meta = fs.metadata(node).expect("metadata");
+        assert_eq!(meta.size, 15);
+
+        let mut out = [0_u8; 32];
+        let read = fs.read(node, 0, &mut out).expect("read");
+        assert_eq!(&out[..read], b"hello from tool");
+
+        let _ = fs::remove_dir_all(dir);
     }
 }

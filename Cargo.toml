@@ -19,6 +19,9 @@ qemu-test = []
 [dependencies]
 simplefs-core = { path = "crates/simplefs-core", default-features = false }
 
+[dev-dependencies]
+simplefs-tool = { path = "crates/simplefs-tool" }
+
 [profile.dev]
 panic = "abort"
 

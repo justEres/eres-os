@@ -1,4 +1,5 @@
 use crate::{arch, console};
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::arch::asm;
 
@@ -222,10 +223,26 @@ fn mount_simplefs() -> Result<SimpleFs<FsDevice>, &'static [u8]> {
 
 #[cfg(eres_kernel)]
 fn resolve_simplefs_path(fs: &SimpleFs<FsDevice>, path: &str) -> Result<crate::fs::vfs::NodeId, &'static [u8]> {
-    if path == "/" {
+    let normalized = normalize_simplefs_path(path);
+    if normalized == "/" {
         Ok(fs.root())
     } else {
-        resolve_path(fs, path).map_err(|_| b"path not found".as_slice())
+        resolve_path(fs, &normalized).map_err(|_| b"path not found".as_slice())
+    }
+}
+
+fn normalize_simplefs_path(path: &str) -> String {
+    let trimmed = path.trim();
+    if trimmed.is_empty() || trimmed == "/" {
+        return String::from("/");
+    }
+
+    if trimmed.as_bytes()[0] == b'/' {
+        String::from(trimmed)
+    } else {
+        let mut out = String::from("/");
+        out.push_str(trimmed);
+        out
     }
 }
 
@@ -500,7 +517,7 @@ fn replace_line(line_buf: &mut [u8], len: &mut usize, replacement: &[u8]) {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_command, CommandKind};
+    use super::{normalize_simplefs_path, parse_command, CommandKind};
 
     #[test]
     fn parses_help() {
@@ -563,6 +580,16 @@ mod tests {
         let parsed = parse_command(b"stat /version.txt");
         assert_eq!(parsed.kind, CommandKind::Stat);
         assert_eq!(parsed.arg, b"/version.txt");
+    }
+
+    #[test]
+    fn normalizes_relative_path() {
+        assert_eq!(normalize_simplefs_path("motd.txt"), "/motd.txt");
+    }
+
+    #[test]
+    fn keeps_absolute_path() {
+        assert_eq!(normalize_simplefs_path("/motd.txt"), "/motd.txt");
     }
 
     #[test]

@@ -61,6 +61,7 @@ For command-parser test mode in QEMU:
 ```
 
 `scripts/build_image.sh` now also builds a secondary `build/simplefs.img` from files in `fs/root/` and attaches it as the second IDE disk in QEMU.
+The image is generated via `simplefs-tool --output <img> --input-dir <dir>`.
 
 Debug markers are printed to QEMU debug console (`port 0xE9`):
 
@@ -89,8 +90,8 @@ After boot, a simple shell prompt is available:
 - `mem` (frame allocator stats)
 - `ticks`
 - `ls [path]` (lists simplefs directory, default `/`)
-- `cat <path>` (prints simplefs file content)
-- `stat <path>` (prints file type and size)
+- `cat <path>` (prints simplefs file content, absolute or relative path)
+- `stat <path>` (prints file type and size, absolute or relative path)
 - `panic` (triggers invalid opcode exception intentionally)
 - `halt`
 - `reboot`

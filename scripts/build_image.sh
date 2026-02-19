@@ -80,7 +80,7 @@ echo "Stage2 size: $stage2_size bytes ($stage2_sectors sectors)"
 if [[ -d "$SIMPLEFS_DIR" ]]; then
     mapfile -t SIMPLEFS_FILES < <(find "$SIMPLEFS_DIR" -maxdepth 1 -type f | sort)
     if (( ${#SIMPLEFS_FILES[@]} > 0 )); then
-        cargo run -q -p simplefs-tool -- "$SIMPLEFS_IMAGE" "${SIMPLEFS_FILES[@]}"
+        cargo run -q -p simplefs-tool -- --output "$SIMPLEFS_IMAGE" --input-dir "$SIMPLEFS_DIR"
         echo "Built $SIMPLEFS_IMAGE with ${#SIMPLEFS_FILES[@]} files"
     fi
 fi
