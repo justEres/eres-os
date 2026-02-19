@@ -1,5 +1,6 @@
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cell::RefCell;
 
 use simplefs_core::{DirEntry, FsError, Superblock, BLOCK_SIZE, DIR_ENTRY_SIZE};
 
@@ -7,7 +8,7 @@ use crate::fs::vfs::{DirEntry as VfsDirEntry, FileSystem, Metadata, NodeId, Node
 use crate::storage::block::{BlockDevice, BlockError};
 
 pub struct SimpleFs<D: BlockDevice> {
-    device: D,
+    device: RefCell<D>,
     superblock: Superblock,
     entries: Vec<DirEntry>,
 }
@@ -44,7 +45,7 @@ impl<D: BlockDevice> SimpleFs<D> {
         }
 
         Ok(Self {
-            device,
+            device: RefCell::new(device),
             superblock,
             entries,
         })
@@ -143,14 +144,10 @@ impl<D: BlockDevice> FileSystem for SimpleFs<D> {
             let block_index = abs / BLOCK_SIZE;
             let block_offset = abs % BLOCK_SIZE;
             let lba = entry.file_start_block as usize + block_index;
-            // Safety note: FileSystem::read takes &self, but device access mutates controller state.
-            // We use interior mutability via raw pointer here since reads are single-threaded today.
-            let dev_ptr = &self.device as *const D as *mut D;
-            unsafe {
-                (*dev_ptr)
-                    .read_sector(lba as u64, &mut scratch)
-                    .map_err(map_block_error)?;
-            }
+            self.device
+                .borrow_mut()
+                .read_sector(lba as u64, &mut scratch)
+                .map_err(map_block_error)?;
 
             let to_copy = core::cmp::min(max_bytes - read_total, BLOCK_SIZE - block_offset);
             out[read_total..read_total + to_copy]
