@@ -4,7 +4,7 @@ use core::arch::asm;
 
 const MAX_LINE: usize = 128;
 const MAX_HISTORY: usize = 16;
-const HELP_TEXT: &[u8] = b"commands: help echo clear history panic halt reboot";
+const HELP_TEXT: &[u8] = b"commands: help echo clear history ticks panic halt reboot";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CommandKind {
@@ -13,6 +13,7 @@ enum CommandKind {
     Echo,
     Clear,
     History,
+    Ticks,
     Panic,
     Halt,
     Reboot,
@@ -93,6 +94,11 @@ fn execute_command(line: &[u8], history: &mut Vec<Vec<u8>>) {
                 console::write_line(entry);
             }
         }
+        CommandKind::Ticks => {
+            console::write_str(b"ticks=");
+            console::write_u64(arch::x86_64::pit::ticks());
+            console::write_byte(b'\n');
+        }
         CommandKind::Panic => {
             unsafe {
                 asm!("ud2", options(nomem, nostack, preserves_flags));
@@ -142,6 +148,13 @@ fn parse_command(line: &[u8]) -> ParsedCommand<'_> {
         };
     }
 
+    if line == b"ticks" {
+        return ParsedCommand {
+            kind: CommandKind::Ticks,
+            arg: b"",
+        };
+    }
+
     if line == b"panic" {
         return ParsedCommand {
             kind: CommandKind::Panic,
@@ -183,6 +196,7 @@ pub fn run_command_self_tests() -> bool {
     ok &= check_parse(b"help", CommandKind::Help, b"");
     ok &= check_parse(b"clear", CommandKind::Clear, b"");
     ok &= check_parse(b"history", CommandKind::History, b"");
+    ok &= check_parse(b"ticks", CommandKind::Ticks, b"");
     ok &= check_parse(b"panic", CommandKind::Panic, b"");
     ok &= check_parse(b"halt", CommandKind::Halt, b"");
     ok &= check_parse(b"reboot", CommandKind::Reboot, b"");
@@ -231,6 +245,13 @@ mod tests {
     fn parses_history_command() {
         let parsed = parse_command(b"history");
         assert_eq!(parsed.kind, CommandKind::History);
+        assert_eq!(parsed.arg, b"");
+    }
+
+    #[test]
+    fn parses_ticks_command() {
+        let parsed = parse_command(b"ticks");
+        assert_eq!(parsed.kind, CommandKind::Ticks);
         assert_eq!(parsed.arg, b"");
     }
 

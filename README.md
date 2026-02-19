@@ -71,6 +71,9 @@ Debug markers are printed to QEMU debug console (`port 0xE9`):
 Then Rust prints:
 
 - `Eres OS: Rust kernel reached long mode.`
+- `Eres OS: boot info map OK.`
+- `Eres OS: frame allocator OK.`
+- `Eres OS: heap allocator OK.`
 - `Eres OS: IDT/PIC initialized.`
 - `Eres OS: keyboard decode OK.`
 
@@ -79,11 +82,15 @@ After boot, a simple shell prompt is available:
 - `help`
 - `echo <text>`
 - `clear`
+- `history`
+- `ticks`
 - `panic` (triggers invalid opcode exception intentionally)
 - `halt`
 - `reboot`
 
 Keyboard decoding uses a German QWERTZ-oriented scancode mapping with ASCII fallbacks.
+Page faults and protection faults now print diagnostic values (`vector`, `error`, `rip`, and `cr2` for page faults).
+PIT timer IRQ0 is enabled at 100 Hz.
 
 ## Tests
 
@@ -118,4 +125,4 @@ PROJECT_STRUCTURE.md
 ## Notes
 
 - This is intentionally minimal and educational.
-- Next logical steps: basic serial logger, IDT/exceptions, and memory map handoff.
+- Next logical steps: frame-backed virtual memory mapping, process/task model, and filesystem support.

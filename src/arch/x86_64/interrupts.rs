@@ -3,13 +3,14 @@ use core::mem::size_of;
 
 use crate::{arch, console};
 
-use super::{keyboard, pic};
+use super::{keyboard, pic, pit};
 
 const IDT_ENTRIES: usize = 256;
 const KERNEL_CODE_SELECTOR: u16 = 0x18;
 const INTERRUPT_GATE_FLAGS: u8 = 0x8E;
 
 const IRQ_BASE: u8 = pic::PIC1_OFFSET;
+const IRQ_TIMER: u8 = IRQ_BASE;
 const IRQ_KEYBOARD: u8 = IRQ_BASE + 1;
 
 #[repr(C, packed)]
@@ -63,6 +64,7 @@ unsafe extern "C" {
     fn isr_double_fault();
     fn isr_general_protection_fault();
     fn isr_page_fault();
+    fn isr_irq0_timer();
     fn isr_irq1_keyboard();
 }
 
@@ -75,12 +77,14 @@ pub fn init() {
         set_gate(8, isr_double_fault);
         set_gate(13, isr_general_protection_fault);
         set_gate(14, isr_page_fault);
+        set_gate(IRQ_TIMER, isr_irq0_timer);
         set_gate(IRQ_KEYBOARD, isr_irq1_keyboard);
         load_idt();
     }
 
     pic::remap();
-    pic::set_masks(0b1111_1101, 0xff);
+    pit::init();
+    pic::set_masks(0b1111_1100, 0xff);
 }
 
 unsafe fn set_gate(index: u8, handler: unsafe extern "C" fn()) {
@@ -105,24 +109,26 @@ unsafe fn load_idt() {
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn interrupt_dispatch(vector: u64, error_code: u64) {
+extern "C" fn interrupt_dispatch(vector: u64, error_code: u64, rip: u64) {
     match vector as u8 {
-        0 => fatal_exception(b"EXC: divide by zero"),
-        6 => fatal_exception(b"EXC: invalid opcode"),
-        8 => fatal_exception(b"EXC: double fault"),
-        13 => {
-            let _ = error_code;
-            fatal_exception(b"EXC: general protection fault")
-        }
-        14 => {
-            let _ = read_cr2();
-            let _ = error_code;
-            fatal_exception(b"EXC: page fault")
+        0 => handle_exception(b"EXC: divide by zero", vector, error_code, rip, false),
+        6 => handle_exception(b"EXC: invalid opcode", vector, error_code, rip, false),
+        8 => handle_exception(b"EXC: double fault", vector, error_code, rip, false),
+        13 => handle_exception(
+            b"EXC: general protection fault",
+            vector,
+            error_code,
+            rip,
+            false,
+        ),
+        14 => handle_exception(b"EXC: page fault", vector, error_code, rip, true),
+        IRQ_TIMER => {
+            pit::on_tick();
         }
         IRQ_KEYBOARD => {
             keyboard::handle_irq();
         }
-        _ => fatal_exception(b"EXC: unhandled vector"),
+        _ => handle_exception(b"EXC: unhandled vector", vector, error_code, rip, false),
     }
 
     if (IRQ_BASE..IRQ_BASE + 16).contains(&(vector as u8)) {
@@ -130,8 +136,28 @@ extern "C" fn interrupt_dispatch(vector: u64, error_code: u64) {
     }
 }
 
-fn fatal_exception(message: &[u8]) -> ! {
+fn handle_exception(
+    message: &[u8],
+    vector: u64,
+    error_code: u64,
+    rip: u64,
+    include_cr2: bool,
+) -> ! {
     console::write_line(message);
+    console::write_str(b"  vector=");
+    console::write_u64(vector);
+    console::write_byte(b'\n');
+    console::write_str(b"  error=");
+    console::write_hex_u64(error_code);
+    console::write_byte(b'\n');
+    console::write_str(b"  rip=");
+    console::write_hex_u64(rip);
+    console::write_byte(b'\n');
+    if include_cr2 {
+        console::write_str(b"  cr2=");
+        console::write_hex_u64(read_cr2());
+        console::write_byte(b'\n');
+    }
     arch::x86_64::hang();
 }
 
@@ -180,6 +206,7 @@ isr_common:
 
     mov rdi, [rsp + 120]
     mov rsi, [rsp + 128]
+    mov rdx, [rsp + 136]
     call interrupt_dispatch
 
     pop r15
@@ -206,6 +233,7 @@ ISR_NOERR isr_invalid_opcode, 6
 ISR_ERR   isr_double_fault, 8
 ISR_ERR   isr_general_protection_fault, 13
 ISR_ERR   isr_page_fault, 14
+ISR_NOERR isr_irq0_timer, 32
 ISR_NOERR isr_irq1_keyboard, 33
 "#
 );

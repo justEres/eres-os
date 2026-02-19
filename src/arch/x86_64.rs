@@ -2,6 +2,7 @@ use core::arch::asm;
 
 pub mod interrupts;
 pub mod keyboard;
+pub mod pit;
 mod io;
 mod pic;
 

@@ -13,7 +13,7 @@
 ## Milestone 2: Keyboard Input
 
 - [x] Handle IRQ1 keyboard scancodes from port `0x60`.
-- [x] Add simple scancode-set-1 decoder (US layout subset first).
+- [x] Add simple scancode-set-1 decoder (German QWERTZ-oriented subset first).
 - [x] Track shift state.
 - [x] Push decoded keys into a static ring buffer.
 - [x] Add basic key polling API for console.
@@ -28,13 +28,14 @@
 
 ## Milestone 4: Memory Foundations
 
-- [ ] Define memory map handoff format from boot stages.
-- [ ] Implement physical frame allocator.
-- [ ] Add kernel heap allocator and `alloc` crate integration.
-- [ ] Move dynamic buffers/strings in shell to heap-backed forms.
+- [x] Define memory map handoff format from boot stages.
+- [x] Implement physical frame allocator.
+- [x] Add kernel heap allocator and `alloc` crate integration.
+- [x] Move dynamic buffers/strings in shell to heap-backed forms.
 
 ## Milestone 5: Quality and Debugging
 
 - [ ] Add structured logging levels over debugcon.
-- [ ] Add reusable test boot profile (`--headless` smoke checks).
+- [x] Add reusable test boot profile (`--headless` smoke checks).
+- [x] Add exception diagnostics and PIT timer IRQ support.
 - [ ] Document architecture and boot flow updates in README.
