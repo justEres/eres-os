@@ -1,8 +1,10 @@
 use crate::{arch, console};
+use alloc::vec::Vec;
 use core::arch::asm;
 
 const MAX_LINE: usize = 128;
-const HELP_TEXT: &[u8] = b"commands: help echo clear panic halt reboot";
+const MAX_HISTORY: usize = 16;
+const HELP_TEXT: &[u8] = b"commands: help echo clear history panic halt reboot";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CommandKind {
@@ -10,6 +12,7 @@ enum CommandKind {
     Help,
     Echo,
     Clear,
+    History,
     Panic,
     Halt,
     Reboot,
@@ -25,6 +28,7 @@ struct ParsedCommand<'a> {
 pub fn run() -> ! {
     let mut line_buf = [0_u8; MAX_LINE];
     let mut len = 0_usize;
+    let mut history: Vec<Vec<u8>> = Vec::new();
 
     console::write_line(b"Type 'help' for commands.");
     prompt();
@@ -34,7 +38,7 @@ pub fn run() -> ! {
             match ch {
                 b'\n' => {
                     console::write_byte(b'\n');
-                    execute_command(&line_buf[..len]);
+                    execute_command(&line_buf[..len], &mut history);
                     len = 0;
                     prompt();
                 }
@@ -63,8 +67,15 @@ fn prompt() {
     console::write_str(b"> ");
 }
 
-fn execute_command(line: &[u8]) {
+fn execute_command(line: &[u8], history: &mut Vec<Vec<u8>>) {
     let parsed = parse_command(line);
+
+    if !line.is_empty() {
+        if history.len() >= MAX_HISTORY {
+            let _ = history.remove(0);
+        }
+        history.push(line.to_vec());
+    }
 
     match parsed.kind {
         CommandKind::Empty => {}
@@ -76,6 +87,11 @@ fn execute_command(line: &[u8]) {
         }
         CommandKind::Clear => {
             console::clear();
+        }
+        CommandKind::History => {
+            for entry in history.iter() {
+                console::write_line(entry);
+            }
         }
         CommandKind::Panic => {
             unsafe {
@@ -115,6 +131,13 @@ fn parse_command(line: &[u8]) -> ParsedCommand<'_> {
     if line == b"clear" {
         return ParsedCommand {
             kind: CommandKind::Clear,
+            arg: b"",
+        };
+    }
+
+    if line == b"history" {
+        return ParsedCommand {
+            kind: CommandKind::History,
             arg: b"",
         };
     }
@@ -159,6 +182,7 @@ pub fn run_command_self_tests() -> bool {
     ok &= check_parse(b"", CommandKind::Empty, b"");
     ok &= check_parse(b"help", CommandKind::Help, b"");
     ok &= check_parse(b"clear", CommandKind::Clear, b"");
+    ok &= check_parse(b"history", CommandKind::History, b"");
     ok &= check_parse(b"panic", CommandKind::Panic, b"");
     ok &= check_parse(b"halt", CommandKind::Halt, b"");
     ok &= check_parse(b"reboot", CommandKind::Reboot, b"");
@@ -200,6 +224,13 @@ mod tests {
     fn parses_unknown_command() {
         let parsed = parse_command(b"foo");
         assert_eq!(parsed.kind, CommandKind::Unknown);
+        assert_eq!(parsed.arg, b"");
+    }
+
+    #[test]
+    fn parses_history_command() {
+        let parsed = parse_command(b"history");
+        assert_eq!(parsed.kind, CommandKind::History);
         assert_eq!(parsed.arg, b"");
     }
 

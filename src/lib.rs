@@ -1,6 +1,8 @@
 #![cfg_attr(eres_kernel, no_std)]
 #![cfg_attr(not(eres_kernel), allow(dead_code))]
 
+extern crate alloc;
+
 mod arch;
 mod console;
 mod memory;
@@ -25,6 +27,8 @@ pub extern "C" fn kernel_main(boot_info_ptr: *const memory::bootinfo::BootInfoRa
             } else {
                 console::write_line(b"Eres OS: frame allocator empty.");
             }
+            memory::heap::init();
+            heap_smoke_test();
         }
     } else {
         console::write_line(b"Eres OS: boot info invalid.");
@@ -89,5 +93,21 @@ fn keyboard_smoke_test() {
         console::write_line(b"Eres OS: keyboard decode OK.");
     } else {
         console::write_line(b"Eres OS: keyboard decode FAILED.");
+    }
+}
+
+#[cfg(eres_kernel)]
+fn heap_smoke_test() {
+    use alloc::vec::Vec;
+
+    let mut values = Vec::new();
+    values.push(1_u8);
+    values.push(2_u8);
+    values.push(3_u8);
+
+    if values.as_slice() == [1, 2, 3] {
+        console::write_line(b"Eres OS: heap allocator OK.");
+    } else {
+        console::write_line(b"Eres OS: heap allocator FAILED.");
     }
 }
