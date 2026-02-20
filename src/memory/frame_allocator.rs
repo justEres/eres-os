@@ -1,13 +1,23 @@
+//! Sehr einfacher physischer Frame-Allocator.
+//!
+//! Er durchläuft die vom Bootloader gemeldeten nutzbaren Speicherbereiche (`entry_type == 1`)
+//! und vergibt 4-KiB-Rahmen sequenziell. Das reicht für frühe Kernel-Phasen.
+
 use super::bootinfo::MemoryMapEntry;
 
+/// Größe eines physischen Frames (4 KiB).
 pub const FRAME_SIZE: u64 = 4096;
+/// Untergrenze für allokierbaren Speicher (2 MiB, um niedrige Bereiche zu meiden).
 pub const MIN_ALLOCATABLE_ADDR: u64 = 0x20_0000;
 
+/// Ein physischer Speicherrahmen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PhysicalFrame {
+    /// Startadresse des Frames.
     pub start: u64,
 }
 
+/// Laufzeitstatistik des globalen Allocators.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrameStats {
     pub total_frames: u64,
@@ -15,6 +25,7 @@ pub struct FrameStats {
     pub free_frames: u64,
 }
 
+/// Sequentieller Iterator über allokierbare Speicherrahmen.
 pub struct FrameAllocator<'a> {
     regions: &'a [MemoryMapEntry],
     region_index: usize,
@@ -24,6 +35,7 @@ pub struct FrameAllocator<'a> {
 }
 
 impl<'a> FrameAllocator<'a> {
+    /// Erzeugt einen neuen Allocator über gegebene Speicherregionen.
     pub fn new(regions: &'a [MemoryMapEntry], min_addr: u64) -> Self {
         let mut allocator = Self {
             regions,
@@ -36,6 +48,7 @@ impl<'a> FrameAllocator<'a> {
         allocator
     }
 
+    /// Reserviert den nächsten verfügbaren Frame.
     pub fn alloc(&mut self) -> Option<PhysicalFrame> {
         loop {
             if self.next_addr >= self.region_end {
@@ -56,11 +69,13 @@ impl<'a> FrameAllocator<'a> {
         }
     }
 
+    /// Springt zur nächsten nutzbaren Speicherregion.
     fn select_next_region(&mut self) {
         while self.region_index < self.regions.len() {
             let region = self.regions[self.region_index];
             self.region_index += 1;
 
+            // E820: Typ 1 steht für "usable RAM".
             if region.entry_type != 1 || region.length == 0 {
                 continue;
             }
@@ -87,9 +102,9 @@ const fn align_up(value: u64, align: u64) -> u64 {
 }
 
 #[cfg(eres_kernel)]
-use core::sync::atomic::{AtomicBool, Ordering};
-#[cfg(eres_kernel)]
 use core::cell::UnsafeCell;
+#[cfg(eres_kernel)]
+use core::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(eres_kernel)]
 struct FrameAllocatorCell(UnsafeCell<Option<FrameAllocator<'static>>>);
@@ -104,32 +119,40 @@ static TOTAL_FRAMES: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU
 #[cfg(eres_kernel)]
 static ALLOCATED_FRAMES: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
+/// Initialisiert den globalen Frame-Allocator aus der Boot-Speicherkarte.
 #[cfg(eres_kernel)]
 pub fn init_from_memory_map(entries: &'static [MemoryMapEntry]) {
     let total = count_usable_frames(entries, MIN_ALLOCATABLE_ADDR);
+
     unsafe {
         *FRAME_ALLOCATOR.0.get() = Some(FrameAllocator::new(entries, MIN_ALLOCATABLE_ADDR));
     }
+
     TOTAL_FRAMES.store(total, Ordering::Release);
     ALLOCATED_FRAMES.store(0, Ordering::Release);
     FRAME_ALLOCATOR_READY.store(true, Ordering::Release);
 }
 
+/// Allokiert einen einzelnen physischen Frame aus dem globalen Allocator.
 #[cfg(eres_kernel)]
 pub fn alloc_frame() -> Option<PhysicalFrame> {
     if !FRAME_ALLOCATOR_READY.load(Ordering::Acquire) {
         return None;
     }
 
-    let interrupts_were_enabled = crate::arch::x86_64::save_and_disable_interrupts();
-    let frame = unsafe { (*FRAME_ALLOCATOR.0.get()).as_mut().and_then(FrameAllocator::alloc) };
-    crate::arch::x86_64::restore_interrupts(interrupts_were_enabled);
+    let frame = unsafe {
+        let allocator = &mut *FRAME_ALLOCATOR.0.get();
+        allocator.as_mut().and_then(FrameAllocator::alloc)
+    };
+
     if frame.is_some() {
-        ALLOCATED_FRAMES.fetch_add(1, Ordering::Relaxed);
+        ALLOCATED_FRAMES.fetch_add(1, Ordering::AcqRel);
     }
+
     frame
 }
 
+/// Gibt statistische Informationen über den globalen Allocator zurück.
 #[cfg(eres_kernel)]
 pub fn stats() -> Option<FrameStats> {
     if !FRAME_ALLOCATOR_READY.load(Ordering::Acquire) {
@@ -137,7 +160,7 @@ pub fn stats() -> Option<FrameStats> {
     }
 
     let total = TOTAL_FRAMES.load(Ordering::Acquire);
-    let allocated = ALLOCATED_FRAMES.load(Ordering::Relaxed);
+    let allocated = ALLOCATED_FRAMES.load(Ordering::Acquire);
     Some(FrameStats {
         total_frames: total,
         allocated_frames: allocated,
@@ -145,35 +168,42 @@ pub fn stats() -> Option<FrameStats> {
     })
 }
 
+/// Test-/Host-Build-Fallback ohne globalen Allocatorzustand.
 #[cfg(not(eres_kernel))]
 pub fn stats() -> Option<FrameStats> {
     None
 }
 
-pub fn count_usable_frames(entries: &[MemoryMapEntry], min_addr: u64) -> u64 {
-    let mut total = 0_u64;
-    for entry in entries {
-        if entry.entry_type != 1 || entry.length == 0 {
+#[cfg(not(eres_kernel))]
+pub fn alloc_frame() -> Option<PhysicalFrame> {
+    None
+}
+
+fn count_usable_frames(entries: &[MemoryMapEntry], min_addr: u64) -> u64 {
+    let mut count = 0;
+
+    for region in entries {
+        if region.entry_type != 1 || region.length == 0 {
             continue;
         }
 
-        let start = align_up(entry.base.max(min_addr), FRAME_SIZE);
-        let end = entry.base.saturating_add(entry.length);
-        if end <= start {
-            continue;
+        let start = align_up(region.base.max(min_addr), FRAME_SIZE);
+        let end = align_up(region.base.saturating_add(region.length), FRAME_SIZE);
+        if start < end {
+            count += (end - start) / FRAME_SIZE;
         }
-        total += (end - start) / FRAME_SIZE;
     }
-    total
+
+    count
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{FrameAllocator, FRAME_SIZE};
+    use super::{FRAME_SIZE, FrameAllocator};
     use crate::memory::bootinfo::MemoryMapEntry;
 
     #[test]
-    fn allocates_from_usable_region() {
+    fn allocates_consecutive_frames() {
         let regions = [MemoryMapEntry {
             base: 0x200000,
             length: FRAME_SIZE * 3,

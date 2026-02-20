@@ -1,3 +1,7 @@
+//! Ansteuerung des Programmable Interval Timer (PIT).
+//!
+//! Hintergrund: <https://wiki.osdev.org/Programmable_Interval_Timer>
+
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use super::io::outb;
@@ -9,6 +13,7 @@ const PIT_TARGET_HZ: u32 = 100;
 
 static TICKS: AtomicU64 = AtomicU64::new(0);
 
+/// Programmiert PIT Kanal 0 auf `PIT_TARGET_HZ`.
 pub fn init() {
     let divisor = (PIT_BASE_FREQUENCY / PIT_TARGET_HZ) as u16;
     outb(PIT_COMMAND, 0x36);
@@ -16,10 +21,12 @@ pub fn init() {
     outb(PIT_CHANNEL0_DATA, (divisor >> 8) as u8);
 }
 
+/// Wird bei jedem Timer-IRQ aufgerufen und erhöht den Tickzähler.
 pub fn on_tick() {
     TICKS.fetch_add(1, Ordering::Relaxed);
 }
 
+/// Liefert die seit Start gezählten PIT-Ticks.
 pub fn ticks() -> u64 {
     TICKS.load(Ordering::Relaxed)
 }

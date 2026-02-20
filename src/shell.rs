@@ -1,3 +1,11 @@
+//! Sehr einfache interaktive Kernel-Shell.
+//!
+//! Ziel: mit wenig Infrastruktur bereits Diagnosen und Systembefehle bereitstellen.
+//!
+//! Lesetipps:
+//! - Shell-Grundlagen in OS-Projekten: <https://wiki.osdev.org/Creating_A_Shell>
+//! - Keyboard input (PS/2): <https://wiki.osdev.org/PS/2_Keyboard>
+
 use crate::{arch, console};
 use alloc::vec::Vec;
 use core::arch::asm;
@@ -27,6 +35,7 @@ struct ParsedCommand<'a> {
     arg: &'a [u8],
 }
 
+/// Startet die Hauptschleife der Shell und kehrt nie zurück.
 pub fn run() -> ! {
     let mut line_buf = [0_u8; MAX_LINE];
     let mut len = 0_usize;
@@ -101,10 +110,12 @@ pub fn run() -> ! {
     }
 }
 
+/// Schreibt den Shell-Prompt.
 fn prompt() {
     console::write_str(b"> ");
 }
 
+/// Führt eine bereits eingelesene Befehlszeile aus.
 fn execute_command(line: &[u8], history: &mut Vec<Vec<u8>>) {
     let parsed = parse_command(line);
 
@@ -169,6 +180,7 @@ fn execute_command(line: &[u8], history: &mut Vec<Vec<u8>>) {
     }
 }
 
+/// Parst eine Eingabezeile in Befehl + Argument.
 fn parse_command(line: &[u8]) -> ParsedCommand<'_> {
     if line.is_empty() {
         return ParsedCommand {
@@ -247,6 +259,7 @@ fn parse_command(line: &[u8]) -> ParsedCommand<'_> {
 }
 
 #[cfg(any(test, feature = "qemu-test"))]
+/// Fährt eine kleine Menge parser-zentrierter Selbsttests.
 pub fn run_command_self_tests() -> bool {
     let mut ok = true;
     ok &= check_parse(b"", CommandKind::Empty, b"");
@@ -270,10 +283,12 @@ fn check_parse(line: &[u8], expected_kind: CommandKind, expected_arg: &[u8]) -> 
     parsed.kind == expected_kind && parsed.arg == expected_arg
 }
 
+/// Filtert auf druckbare ASCII-Zeichen (Space bis Tilde).
 fn is_printable_ascii(byte: u8) -> bool {
     (0x20..=0x7E).contains(&byte)
 }
 
+/// Ersetzt die aktuelle Eingabezeile im Terminal (z. B. für History-Navigation).
 fn replace_line(line_buf: &mut [u8], len: &mut usize, replacement: &[u8]) {
     while *len > 0 {
         console::backspace();
@@ -290,7 +305,7 @@ fn replace_line(line_buf: &mut [u8], len: &mut usize, replacement: &[u8]) {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_command, CommandKind};
+    use super::{CommandKind, parse_command};
 
     #[test]
     fn parses_help() {
