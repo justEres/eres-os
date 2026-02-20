@@ -13,12 +13,16 @@
 
 extern crate alloc;
 
-mod arch;
-mod console;
-mod memory;
+/// Architektur-spezifische Implementierungen (x86_64 etc.).
+pub mod arch;
+/// Konsolen- und Debug-Ausgabe.
+pub mod console;
+/// Speicherverwaltung (Bootinfo, Frame-Allocator, Heap).
+pub mod memory;
 #[cfg(eres_kernel)]
 mod panic_handler;
-mod shell;
+/// Einfache Shell für Interaktion im Kernel.
+pub mod shell;
 
 /// Einstiegspunkt, den der Bootloader nach dem Wechsel in den 64-Bit-Modus aufruft.
 ///
