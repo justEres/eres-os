@@ -1,12 +1,23 @@
+//! x86_64-nahe CPU-Steuerfunktionen.
+//!
+//! Referenzen:
+//! - Interrupt-Flag (IF): <https://wiki.osdev.org/Interrupt>
+//! - `hlt`: <https://www.felixcloutier.com/x86/hlt>
+//! - Reboot über Tastaturcontroller: <https://wiki.osdev.org/Reboot>
+
 #[cfg(eres_kernel)]
 use core::arch::asm;
 
+/// Interrupt- und Ausnahmebehandlung.
 pub mod interrupts;
-pub mod keyboard;
-pub mod pit;
 mod io;
+/// PS/2-Tastatur-Dekodierung und Eingabepuffer.
+pub mod keyboard;
 mod pic;
+/// Programmable Interval Timer (Systemtakte).
+pub mod pit;
 
+/// Hält die CPU bis zum nächsten Interrupt an (`hlt`).
 #[inline]
 pub fn halt() {
     #[cfg(eres_kernel)]
@@ -18,6 +29,7 @@ pub fn halt() {
     core::hint::spin_loop();
 }
 
+/// Deaktiviert maskierbare Interrupts (`cli`).
 #[inline]
 pub fn disable_interrupts() {
     #[cfg(eres_kernel)]
@@ -26,6 +38,7 @@ pub fn disable_interrupts() {
     }
 }
 
+/// Aktiviert maskierbare Interrupts (`sti`).
 #[inline]
 pub fn enable_interrupts() {
     #[cfg(eres_kernel)]
@@ -34,6 +47,7 @@ pub fn enable_interrupts() {
     }
 }
 
+/// Prüft, ob das CPU-Interrupt-Flag aktuell gesetzt ist.
 #[inline]
 pub fn interrupts_enabled() -> bool {
     #[cfg(not(eres_kernel))]
@@ -43,14 +57,15 @@ pub fn interrupts_enabled() -> bool {
 
     #[cfg(eres_kernel)]
     {
-    let rflags: u64;
-    unsafe {
-        asm!("pushfq; pop {}", out(reg) rflags, options(nomem, preserves_flags));
-    }
-    (rflags & (1 << 9)) != 0
+        let rflags: u64;
+        unsafe {
+            asm!("pushfq; pop {}", out(reg) rflags, options(nomem, preserves_flags));
+        }
+        (rflags & (1 << 9)) != 0
     }
 }
 
+/// Merkt sich den IF-Status und deaktiviert anschließend Interrupts.
 #[inline]
 pub fn save_and_disable_interrupts() -> bool {
     let was_enabled = interrupts_enabled();
@@ -58,6 +73,7 @@ pub fn save_and_disable_interrupts() -> bool {
     was_enabled
 }
 
+/// Stellt den vorherigen Interrupt-Status wieder her.
 #[inline]
 pub fn restore_interrupts(was_enabled: bool) {
     if was_enabled {
@@ -65,17 +81,20 @@ pub fn restore_interrupts(was_enabled: bool) {
     }
 }
 
+/// Endlosschleife mit `hlt`.
 pub fn halt_loop() -> ! {
     loop {
         halt();
     }
 }
 
+/// Stoppt das System dauerhaft (Interrupts aus + Halt-Loop).
 pub fn hang() -> ! {
     disable_interrupts();
     halt_loop();
 }
 
+/// Versucht einen Hardware-Reboot anzustoßen.
 pub fn reboot() -> ! {
     #[cfg(not(eres_kernel))]
     {
@@ -84,9 +103,9 @@ pub fn reboot() -> ! {
 
     #[cfg(eres_kernel)]
     {
-    disable_interrupts();
-    io::outb(0x64, 0xFE);
-    halt_loop();
+        disable_interrupts();
+        io::outb(0x64, 0xFE);
+        halt_loop();
     }
 }
 

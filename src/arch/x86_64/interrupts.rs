@@ -1,3 +1,9 @@
+//! Aufbau und Behandlung von Interrupts/Exceptions über die IDT.
+//!
+//! Hintergrund:
+//! - IDT: <https://wiki.osdev.org/Interrupt_Descriptor_Table>
+//! - Exceptions: <https://wiki.osdev.org/Exceptions>
+
 use core::arch::{asm, global_asm};
 use core::mem::size_of;
 
@@ -68,6 +74,7 @@ unsafe extern "C" {
     fn isr_irq1_keyboard();
 }
 
+/// Initialisiert IDT, PIC und PIT für den Kernelbetrieb.
 pub fn init() {
     arch::x86_64::disable_interrupts();
 
@@ -109,6 +116,7 @@ unsafe fn load_idt() {
 }
 
 #[unsafe(no_mangle)]
+/// Zentraler Dispatcher, von den ASM-ISR-Stubs aufgerufen.
 extern "C" fn interrupt_dispatch(vector: u64, error_code: u64, rip: u64) {
     match vector as u8 {
         0 => handle_exception(b"EXC: divide by zero", vector, error_code, rip, false),
@@ -136,6 +144,7 @@ extern "C" fn interrupt_dispatch(vector: u64, error_code: u64, rip: u64) {
     }
 }
 
+/// Gibt Diagnosedaten aus und hält danach das System an.
 fn handle_exception(
     message: &[u8],
     vector: u64,
@@ -161,6 +170,7 @@ fn handle_exception(
     arch::x86_64::hang();
 }
 
+/// Liest Register `CR2` (relevant bei Page Faults).
 fn read_cr2() -> u64 {
     let value: u64;
     unsafe {
