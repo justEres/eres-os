@@ -1,6 +1,12 @@
+//! Sehr einfacher Bump-Allocator für frühe Kernel-Entwicklung.
+//!
+//! Der Allocator kann Speicher nur nach vorne vergeben und nie freigeben.
+//! Das ist für frühe Boot- und Prototyp-Phasen oft ausreichend.
+
 use core::alloc::Layout;
 
 #[derive(Clone, Copy, Debug)]
+/// Interner Zustand des linearen Allocators.
 struct BumpCursor {
     start: usize,
     end: usize,
@@ -16,12 +22,14 @@ impl BumpCursor {
         }
     }
 
+    /// Setzt den verwalteten Heap-Bereich.
     fn init(&mut self, start: usize, size: usize) {
         self.start = start;
         self.end = start.saturating_add(size);
         self.next = start;
     }
 
+    /// Allokiert einen Block mit gewünschter Größe/Ausrichtung.
     fn alloc(&mut self, layout: Layout) -> *mut u8 {
         let aligned = align_up(self.next, layout.align());
         let next = aligned.saturating_add(layout.size());
@@ -76,6 +84,7 @@ mod kernel_heap {
         }
     }
 
+    /// `GlobalAlloc`-Wrapper um den gesperrten Cursor.
     pub struct KernelAllocator {
         state: LockedCursor,
     }
@@ -101,13 +110,16 @@ mod kernel_heap {
     static HEAP_READY: AtomicBool = AtomicBool::new(false);
     static mut HEAP_SPACE: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
 
+    /// Initialisiert den statischen Kernel-Heap einmalig.
     pub fn init() {
         if HEAP_READY.load(Ordering::Acquire) {
             return;
         }
 
         let start = core::ptr::addr_of_mut!(HEAP_SPACE) as *mut u8 as usize;
-        KERNEL_ALLOCATOR.state.with_lock(|cursor| cursor.init(start, HEAP_SIZE));
+        KERNEL_ALLOCATOR
+            .state
+            .with_lock(|cursor| cursor.init(start, HEAP_SIZE));
         HEAP_READY.store(true, Ordering::Release);
     }
 }
