@@ -1,41 +1,44 @@
 # Next Steps
 
-## Milestone 1: Interrupt Foundation (Current)
+This file tracks execution order for the next milestones.  
+Rule: each milestone should end with passing `cargo test --workspace` and a QEMU check.
 
-- [x] Add basic x86_64 I/O port helpers (`inb`, `outb`, `io_wait`).
-- [x] Add PIC remap and IRQ mask control.
-- [x] Add IDT structures and `lidt` loader.
-- [x] Add assembly interrupt stubs for core exceptions and IRQ1.
-- [x] Add Rust interrupt dispatcher with visible fault messages.
-- [x] Enable interrupts after initialization in `kernel_main`.
-- [x] Verify boot still reaches Rust and does not triple-fault.
+## Milestone A: Writable SimpleFS
 
-## Milestone 2: Keyboard Input
+- [ ] Extend `simplefs-core` with write-side primitives:
+  - free-space discovery
+  - directory entry allocation/reuse
+  - file growth/shrink rules
+- [ ] Add kernel-side write support in `src/fs/simplefs.rs`.
+- [ ] Introduce a basic fs transaction/error model for partial write safety.
+- [ ] Add unit tests for create/write/read/delete behavior on generated images.
 
-- [x] Handle IRQ1 keyboard scancodes from port `0x60`.
-- [x] Add simple scancode-set-1 decoder (German QWERTZ-oriented subset first).
-- [x] Track shift state.
-- [x] Push decoded keys into a static ring buffer.
-- [x] Add basic key polling API for console.
+## Milestone B: Shell File Commands
 
-## Milestone 3: Console + REPL
+- [ ] Add commands:
+  - `write <path> <text>`
+  - `rm <path>`
+  - `touch <path>` (or implicit create via write)
+- [ ] Improve `ls` formatting (type + size).
+- [ ] Add command parser tests for new syntax.
 
-- [x] Add VGA cursor + line editing helpers.
-- [x] Implement blocking `read_line`.
-- [x] Implement command parser (space-delimited).
-- [x] Add commands: `help`, `echo`, `clear`, `panic`, `halt`, `reboot`.
-- [x] Keep shell loop in kernel main thread.
+## Milestone C: Host Tool Improvements
 
-## Milestone 4: Memory Foundations
+- [ ] Add `simplefs-tool verify` to validate superblock + directory + block bounds.
+- [ ] Add `simplefs-tool ls` and `simplefs-tool cat` for host-side debugging.
+- [ ] Keep tool and kernel behavior aligned through shared `simplefs-core` rules.
 
-- [x] Define memory map handoff format from boot stages.
-- [x] Implement physical frame allocator.
-- [x] Add kernel heap allocator and `alloc` crate integration.
-- [x] Move dynamic buffers/strings in shell to heap-backed forms.
+## Milestone D: Integration and Reliability
 
-## Milestone 5: Quality and Debugging
+- [ ] Add script-driven end-to-end test:
+  - generate image with known files
+  - boot in QEMU test mode
+  - verify expected command outputs
+- [ ] Add structured kernel log levels over debugcon.
+- [ ] Reduce dead-code warnings by gating modules/features more precisely.
 
-- [ ] Add structured logging levels over debugcon.
-- [x] Add reusable test boot profile (`--headless` smoke checks).
-- [x] Add exception diagnostics and PIT timer IRQ support.
-- [ ] Document architecture and boot flow updates in README.
+## Milestone E: Before Moving to a Richer FS
+
+- [ ] Decide whether simplefs remains flat-root only or gets directories.
+- [ ] Define on-disk compatibility policy/versioning.
+- [ ] Add minimal consistency checks on mount (bounds, overlap, duplicate names).

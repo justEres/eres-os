@@ -1,117 +1,69 @@
-# Eres OS - 64-bit Rust Hobby OS Plan
+# Eres OS - Project Structure and Roadmap
 
-## 1) Project goals
+## Goals
 
-- Build a 64-bit (x86_64) hobby OS.
-- Keep core OS logic in Rust (`no_std`, `no_main`).
-- Use assembly only where required:
-  - Early boot stages.
-  - CPU mode transitions.
-  - Small low-level routines (inline asm where needed).
-- Boot and test with QEMU on every iteration.
+- Build a small x86_64 hobby OS in Rust.
+- Keep low-level CPU/boot setup in assembly where required.
+- Run and test every iteration in QEMU.
+- Keep filesystem format logic shared between kernel and host tooling.
 
-## 2) Today’s milestone
+## Current Status
 
-Create a working boot path:
+- BIOS stage1 bootloader (`boot/boot.S`) loads stage2 from disk.
+- Stage2 (`boot/stage2.S`) gathers E820 map, enters protected mode, enables long mode, and jumps to Rust.
+- Rust kernel initializes:
+  - memory map handoff + frame allocator
+  - heap allocator
+  - IDT/PIC/PIT + keyboard input
+  - shell with command parsing/history
+  - ATA PIO block reads
+  - read-only simplefs mount from a second disk image
+- Host toolchain generates both:
+  - `build/os.img` (boot disk)
+  - `build/simplefs.img` (filesystem disk from `fs/root`)
 
-1. Assembly bootloader starts from BIOS boot sector.
-2. Bootloader loads/enters 64-bit mode and jumps to Rust kernel entry.
-3. Rust kernel executes a visible proof (for example writing to VGA text buffer).
-4. Entire binary boots in QEMU reproducibly via one command.
-
-## 3) High-level architecture
-
-- Platform: `x86_64`
-- Firmware path for first version: BIOS + boot sector (simple and educational).
-- Kernel binary style:
-  - `#![no_std]`
-  - `#![no_main]`
-  - custom panic handler
-- Link model:
-  - Assembly stage sets up CPU state and jumps to Rust symbol (example: `kernel_main`).
-  - A linker script controls physical/virtual layout.
-- Output artifact:
-  - Bootable disk image (`.img`) run in QEMU.
-
-## 4) Suggested repository structure
+## Repository Layout
 
 ```text
 eres-os/
-  Cargo.toml
-  PROJECT_STRUCTURE.md
-  rust-toolchain.toml
-  .cargo/
-    config.toml
-  build/
-    linker.ld
   boot/
-    boot.asm
-  src/
-    main.rs            # kernel entry + core init
-    vga.rs             # early text output
-    panic.rs           # panic handler
-  target/
+    boot.S                 # BIOS boot sector (stage1)
+    stage2.S               # mode switching + kernel handoff
+  build/
+    linker.ld              # kernel/stage2 link script
+  crates/
+    simplefs-core/         # shared on-disk format and helpers
+    simplefs-tool/         # Linux CLI to build simplefs images
+  docs/
+    github-pages.md        # docs publishing notes
+  fs/
+    root/                  # input files for generated simplefs image
   scripts/
-    build_image.sh
-    run_qemu.sh
+    build_image.sh         # builds kernel image (+ simplefs image)
+    run_qemu.sh            # QEMU runner (GUI/headless/test)
+    test_qemu_commands.sh
+  src/
+    arch/                  # x86_64 architecture code
+    console/               # VGA + debugcon output
+    fs/                    # VFS traits + simplefs mount/read
+    memory/                # bootinfo, frame allocator, heap, vm helpers
+    storage/               # block traits, ATA PIO, cache
+    lib.rs                 # kernel entry and smoke checks
+    shell.rs               # interactive REPL and commands
 ```
 
-## 5) Toolchain and build decisions
+## Build and Run Flow
 
-- Rust nightly (for low-level flags/features as needed).
-- Target: custom `x86_64` bare-metal JSON target or `x86_64-unknown-none`.
-- Assembler: NASM (or GAS; NASM recommended for clarity).
-- Linker: `ld.lld` (or GNU ld), controlled by `build/linker.ld`.
-- Image creation:
-  - Option A: direct flat binary layout.
-  - Option B: staged ELF + objcopy + disk image.
-  - Start with the simplest reliable flow, then refactor.
+1. Build Rust kernel staticlib for `x86_64-unknown-none`.
+2. Assemble and link stage2 with kernel.
+3. Assemble stage1 with computed stage2 sector count.
+4. Build `build/os.img`.
+5. Build `build/simplefs.img` from `fs/root` via `simplefs-tool`.
+6. Run QEMU with `os.img` as first IDE disk and `simplefs.img` as second IDE disk.
 
-## 6) Concrete build flow (today)
+## Near-Term Direction
 
-1. Build Rust kernel object/staticlib for bare-metal target.
-2. Assemble `boot/boot.asm`.
-3. Link boot + kernel with `linker.ld` to final bootable binary.
-4. Write binary into disk image (with valid boot signature).
-5. Run in QEMU:
-   - `qemu-system-x86_64 -drive format=raw,file=build/os.img`
-6. Verify:
-   - CPU reaches Rust entry.
-   - Visible output confirms execution.
-
-## 7) Minimum technical checklist
-
-- [ ] `no_std` + `no_main` Rust kernel compiles.
-- [ ] Panic handler implemented.
-- [ ] Boot asm has valid 512-byte boot sector signature (`0x55AA`) if using BIOS sector entry.
-- [ ] GDT + long mode transition done before jumping to 64-bit Rust code.
-- [ ] Stack initialized before calling Rust.
-- [ ] Rust entry symbol exported with stable ABI (`extern "C"` + `#[unsafe(no_mangle)]` as required by edition/lints).
-- [ ] Linker script aligns sections correctly.
-- [ ] QEMU command scripted.
-
-## 8) Expected risks (early)
-
-- Triple fault from incorrect GDT/page tables/long-mode enable sequence.
-- Wrong symbol names between assembly and Rust.
-- Linker section placement mistakes.
-- Rust code accidentally pulling in std/runtime pieces.
-
-## 9) Definition of done (for today)
-
-- Running one script/command produces `os.img`.
-- QEMU boots `os.img` without manual steps.
-- Rust kernel code is definitely executing (screen/message/halt loop).
-- Build instructions are documented in README (next step after milestone).
-
-## 10) Immediate next execution plan
-
-1. Convert current crate into kernel crate (`no_std`, `no_main`).
-2. Add assembly bootloader skeleton in `boot/boot.asm`.
-3. Add linker script in `build/linker.ld`.
-4. Add build/run scripts.
-5. Run QEMU and iterate until Rust entry works.
-
----
-
-If this structure looks good, next step is to implement section **10** directly in this repo.
+1. Make simplefs writable (create/remove/update file data + metadata).
+2. Add shell file-manipulation commands (`write`, `rm`, `mkdir` if supported).
+3. Add integration tests for file I/O roundtrips using tool-generated images.
+4. Stabilize error handling/logging around storage and fs paths.

@@ -156,4 +156,5 @@ PROJECT_STRUCTURE.md
 ## Notes
 
 - This is intentionally minimal and educational.
-- Next logical steps: frame-backed virtual memory mapping, process/task model, and filesystem support.
+- Current roadmap is tracked in `NEXT_STEPS.md`.
+- Project structure and architecture notes are tracked in `PROJECT_STRUCTURE.md`.
