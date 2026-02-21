@@ -1,3 +1,8 @@
+//! Cargo-Buildskript.
+//!
+//! Setzt ein internes `cfg(eres_kernel)`, wenn für ein Bare-Metal-Target (`os = "none"`)
+//! gebaut wird, und deklariert relevante Rebuild-Trigger.
+
 use std::env;
 
 fn main() {

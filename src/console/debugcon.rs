@@ -1,3 +1,8 @@
+//! Debug-Ausgabe über I/O-Port `0xE9`.
+//!
+//! Viele Emulatoren (z. B. Bochs/QEMU mit passender Konfiguration) können diese Bytes
+//! direkt im Host-Terminal anzeigen.
+
 use core::arch::asm;
 
 pub fn write_bytes(msg: &[u8]) {

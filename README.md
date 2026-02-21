@@ -100,6 +100,29 @@ Keyboard decoding uses a German QWERTZ-oriented scancode mapping with ASCII fall
 Page faults and protection faults now print diagnostic values (`vector`, `error`, `rip`, and `cr2` for page faults).
 PIT timer IRQ0 is enabled at 100 Hz.
 
+
+## Bootloader-Dokumentation
+
+Eine ausführliche (sehr detaillierte) Erklärung der beiden Boot-Stages findest du direkt in den Dateien:
+
+- `boot/boot.S` (Stage 1: BIOS-Bootsektor, Stage2-Ladevorgang)
+- `boot/stage2.S` (Stage 2: E820, Protected Mode, Paging, Long Mode, Übergabe an Rust)
+
+Dort ist nahezu jeder Schritt kommentiert: **was passiert** und **warum es nötig ist**.
+
+## Dokumentation mit GitHub Pages
+
+Empfohlen ist **GitHub Actions als Source** (kein eigener `gh-pages`-Branch nötig).
+
+- Workflow: `.github/workflows/docs-pages.yml`
+- Zusätzliche Anleitung: `docs/github-pages.md`
+
+Kurzfassung:
+
+1. In GitHub: **Settings → Pages → Source = GitHub Actions**
+2. Auf `main` oder `master` pushen
+3. Workflow baut `cargo doc --no-deps` und veröffentlicht die HTML-Doku automatisch
+
 ## Tests
 
 Host unit tests for command parsing:

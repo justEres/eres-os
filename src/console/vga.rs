@@ -1,3 +1,7 @@
+//! VGA-Textmodus-Treiber (80x25).
+//!
+//! Siehe: <https://wiki.osdev.org/Text_UI>
+
 const WIDTH: usize = 80;
 const HEIGHT: usize = 25;
 const VGA_TEXT_BUFFER: *mut u8 = 0xb8000 as *mut u8;
