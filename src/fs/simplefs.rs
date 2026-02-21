@@ -15,10 +15,12 @@ pub struct SimpleFs<D: BlockDevice> {
 
 impl<D: BlockDevice> SimpleFs<D> {
     pub fn mount(mut device: D) -> Result<Self, VfsError> {
+        // Block 0 contains the superblock with global FS layout metadata.
         let mut sector = [0_u8; BLOCK_SIZE];
         device.read_sector(0, &mut sector).map_err(map_block_error)?;
         let superblock = Superblock::decode(&sector).map_err(map_fs_error)?;
 
+        // Directory data is stored as a contiguous block range right after the superblock.
         let dir_bytes = superblock.dir_block_count as usize * BLOCK_SIZE;
         let mut dir_data = vec![0_u8; dir_bytes];
         for i in 0..superblock.dir_block_count as usize {
@@ -140,6 +142,7 @@ impl<D: BlockDevice> FileSystem for SimpleFs<D> {
         let mut cursor = offset as usize;
         let mut scratch = [0_u8; BLOCK_SIZE];
         while read_total < max_bytes {
+            // Translate file offset -> (disk block, in-block offset).
             let abs = cursor;
             let block_index = abs / BLOCK_SIZE;
             let block_offset = abs % BLOCK_SIZE;

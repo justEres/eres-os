@@ -7,10 +7,13 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Parser)]
 #[command(name = "simplefs-tool", about = "Build a simplefs disk image from host files")]
 pub struct Cli {
+    /// Output disk image path.
     #[arg(short, long, value_name = "IMG")]
     pub output: PathBuf,
+    /// Explicit input file (repeatable).
     #[arg(short = 'f', long = "file", value_name = "FILE")]
     pub files: Vec<PathBuf>,
+    /// Include all regular files from this directory.
     #[arg(long = "input-dir", value_name = "DIR")]
     pub input_dir: Option<PathBuf>,
 }
@@ -71,6 +74,8 @@ pub fn collect_sources(files: &[PathBuf], input_dir: Option<&Path>) -> Result<Ve
 
     out.extend(files.iter().cloned());
     out.sort();
+    // Avoid writing duplicate directory entries when both --file and --input-dir
+    // include the same path.
     out.dedup();
     Ok(out)
 }
